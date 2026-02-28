@@ -1,4 +1,4 @@
-import {TAbstractFile, TFile} from "obsidian";
+import {TAbstractFile, TFile, TFolder} from "obsidian";
 import {isNoteMemorized, addWoakiFrontmatter, removeWoakiFrontmatter, getWoakiId} from "../utils/frontmatter";
 import {computeHash} from "../utils/hash";
 import {chunkMarkdown} from "./chunk";
@@ -7,14 +7,15 @@ import {
 	showForgottenNotice,
 	showNotice,
 	showIndexingCompleteNotice,
-	showRebuildProgressNotice,
 } from "../ui/notices";
+import {ProgressIndicator} from "../ui/progress-indicator";
 import {REINDEX_DEBOUNCE_MS, WOAKI_PROPERTY, WOAKI_MEMORIZED_VALUE} from "../constants";
 import type WoakiPlugin from "../main";
 
 export class MemoryManager {
 	private plugin: WoakiPlugin;
 	private debounceTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
+	private progress = new ProgressIndicator();
 
 	constructor(plugin: WoakiPlugin) {
 		this.plugin = plugin;
@@ -37,20 +38,19 @@ export class MemoryManager {
 			const tags = this.getNoteTags(file).join(", ");
 			const now = Date.now();
 
-			for (let i = 0; i < chunks.length; i++) {
-				const chunk = chunks[i]!;
-				const chunkHash = await computeHash(chunk);
-				const embedding = await this.plugin.embeddingModel.embed(chunk);
+			const hashes = await Promise.all(chunks.map(c => computeHash(c)));
+			const embeddings = await this.plugin.embeddingModel.embedBatch(chunks);
 
+			for (let i = 0; i < chunks.length; i++) {
 				await this.plugin.database.insertChunk({
 					noteId: woakiId,
 					filePath: file.path,
 					chunkIndex: i,
-					chunkHash,
+					chunkHash: hashes[i]!,
 					title: file.basename,
-					content: chunk,
+					content: chunks[i]!,
 					tags,
-					embedding,
+					embedding: embeddings[i]!,
 					memorizedAt: now,
 					updatedAt: now,
 				});
@@ -60,6 +60,9 @@ export class MemoryManager {
 			showIndexingCompleteNotice(file.basename, chunks.length);
 		} catch (e) {
 			console.error("WOAKI: Failed to index note:", e);
+			// Clean up partial DB entries on failure
+			await this.plugin.database.removeNote(woakiId);
+			await this.plugin.database.persist();
 			showNotice(`Failed to index "${file.basename}". Check console for details.`);
 		} finally {
 			this.plugin.statusBar.setIndexing(false);
@@ -155,9 +158,11 @@ export class MemoryManager {
 		// Index missing notes
 		if (needsIndexing.length > 0) {
 			showNotice(`Syncing ${needsIndexing.length} memorized note${needsIndexing.length === 1 ? "" : "s"}...`);
+			this.progress.show("Syncing notes...");
 			for (let i = 0; i < needsIndexing.length; i++) {
 				const file = needsIndexing[i]!;
-				showRebuildProgressNotice(i + 1, needsIndexing.length);
+				this.progress.update(i + 1, needsIndexing.length, `Syncing: ${file.basename}`);
+				this.plugin.statusBar.showProgress(i + 1, needsIndexing.length, "Syncing");
 				try {
 					await this.indexNote(file);
 				} catch (e) {
@@ -165,6 +170,8 @@ export class MemoryManager {
 					showNotice(`Failed to sync "${file.basename}". Check console for details.`);
 				}
 			}
+			this.progress.hide();
+			this.plugin.statusBar.hideProgress();
 		}
 
 		await this.plugin.database.persist();
@@ -185,19 +192,37 @@ export class MemoryManager {
 		}
 
 		this.plugin.statusBar.setIndexing(true);
+		this.progress.show("Rebuilding database...", () => { /* cancel handled via flag */ });
+		const failures: string[] = [];
 		try {
 			for (let i = 0; i < memorizedFiles.length; i++) {
+				if (this.progress.cancelled) {
+					showNotice("Rebuild cancelled.");
+					break;
+				}
 				const file = memorizedFiles[i]!;
-				showRebuildProgressNotice(i + 1, memorizedFiles.length);
-				await this.indexNote(file);
+				this.progress.update(i + 1, memorizedFiles.length, `Rebuilding: ${file.basename}`);
+				this.plugin.statusBar.showProgress(i + 1, memorizedFiles.length, "Rebuilding");
+				try {
+					await this.indexNote(file);
+				} catch (e) {
+					console.error(`WOAKI: Failed to index "${file.basename}" during rebuild:`, e);
+					failures.push(file.basename);
+				}
 			}
 
 			await this.plugin.database.persist();
-			showNotice(`Rebuilt database with ${memorizedFiles.length} note${memorizedFiles.length === 1 ? "" : "s"}.`);
+			if (failures.length > 0) {
+				showNotice(`Rebuilt database. ${failures.length} note${failures.length === 1 ? "" : "s"} failed: ${failures.join(", ")}`);
+			} else {
+				showNotice(`Rebuilt database with ${memorizedFiles.length} note${memorizedFiles.length === 1 ? "" : "s"}.`);
+			}
 		} catch (e) {
 			console.error("WOAKI: Failed to rebuild database:", e);
 			showNotice("Failed to rebuild database. Check console for details.");
 		} finally {
+			this.progress.hide();
+			this.plugin.statusBar.hideProgress();
 			this.plugin.statusBar.setIndexing(false);
 		}
 	}
@@ -206,6 +231,68 @@ export class MemoryManager {
 		await this.plugin.database.clear();
 		await this.plugin.database.persist();
 		showNotice("Memory database cleared.");
+	}
+
+	async memorizeFolder(folderPath: string): Promise<{ succeeded: number; failed: string[] }> {
+		const folder = this.plugin.app.vault.getAbstractFileByPath(folderPath);
+		if (!(folder instanceof TFolder)) {
+			showNotice(`"${folderPath}" is not a folder.`);
+			return { succeeded: 0, failed: [] };
+		}
+
+		// Collect all markdown files in folder (recursively)
+		const files: TFile[] = [];
+		const collectFiles = (f: TFolder) => {
+			for (const child of f.children) {
+				if (child instanceof TFile && child.extension === "md") {
+					files.push(child);
+				} else if (child instanceof TFolder) {
+					collectFiles(child);
+				}
+			}
+		};
+		collectFiles(folder);
+
+		// Filter out already-memorized
+		const toMemorize = files.filter(f => !isNoteMemorized(this.plugin.app, f));
+
+		if (toMemorize.length === 0) {
+			showNotice(`All notes in "${folder.name}" are already memorized.`);
+			return { succeeded: 0, failed: [] };
+		}
+
+		showNotice(`Memorizing ${toMemorize.length} note${toMemorize.length === 1 ? "" : "s"} in "${folder.name}"...`);
+		this.progress.show(`Memorizing folder "${folder.name}"...`, () => { /* cancel handled via flag */ });
+		const failed: string[] = [];
+		let succeeded = 0;
+
+		for (let i = 0; i < toMemorize.length; i++) {
+			if (this.progress.cancelled) {
+				showNotice("Batch memorize cancelled.");
+				break;
+			}
+			const file = toMemorize[i]!;
+			this.progress.update(i + 1, toMemorize.length, `Memorizing: ${file.basename}`);
+			this.plugin.statusBar.showProgress(i + 1, toMemorize.length, "Memorizing");
+			try {
+				await this.memorizeNote(file);
+				succeeded++;
+			} catch (e) {
+				console.error(`WOAKI: Failed to memorize "${file.basename}":`, e);
+				failed.push(file.basename);
+			}
+		}
+
+		this.progress.hide();
+		this.plugin.statusBar.hideProgress();
+
+		if (failed.length > 0) {
+			showNotice(`Memorized ${succeeded} note${succeeded === 1 ? "" : "s"}. ${failed.length} failed: ${failed.join(", ")}`);
+		} else {
+			showNotice(`Memorized ${succeeded} note${succeeded === 1 ? "" : "s"} in "${folder.name}".`);
+		}
+
+		return { succeeded, failed };
 	}
 
 	getNoteTags(file: TFile): string[] {
@@ -238,20 +325,19 @@ export class MemoryManager {
 		const tags = this.getNoteTags(file).join(", ");
 		const now = Date.now();
 
-		for (let i = 0; i < chunks.length; i++) {
-			const chunk = chunks[i]!;
-			const chunkHash = await computeHash(chunk);
-			const embedding = await this.plugin.embeddingModel.embed(chunk);
+		const hashes = await Promise.all(chunks.map(c => computeHash(c)));
+		const embeddings = await this.plugin.embeddingModel.embedBatch(chunks);
 
+		for (let i = 0; i < chunks.length; i++) {
 			await this.plugin.database.insertChunk({
 				noteId: woakiId,
 				filePath: file.path,
 				chunkIndex: i,
-				chunkHash,
+				chunkHash: hashes[i]!,
 				title: file.basename,
-				content: chunk,
+				content: chunks[i]!,
 				tags,
-				embedding,
+				embedding: embeddings[i]!,
 				memorizedAt: now,
 				updatedAt: now,
 			});
@@ -268,47 +354,45 @@ export class MemoryManager {
 			const tags = this.getNoteTags(file).join(", ");
 			const now = Date.now();
 
-			let changed = false;
+			const hashes = await Promise.all(chunks.map(c => computeHash(c)));
+
+			let needsFullReindex = false;
+			const newChunkIndices: number[] = [];
 
 			for (let i = 0; i < chunks.length; i++) {
-				const chunk = chunks[i]!;
-				const chunkHash = await computeHash(chunk);
-
-				// Check if this chunk exists and is unchanged
 				const existing = await this.plugin.database.getChunk(woakiId, i);
-				if (existing && existing.chunkHash === chunkHash) {
-					continue; // Chunk unchanged, skip
+				if (existing && existing.chunkHash === hashes[i]) {
+					continue; // Chunk unchanged
 				}
-
-				// Chunk is new or changed — embed and insert/replace
 				if (existing) {
-					// Remove old chunk by removing and re-inserting note chunks
-					// For simplicity, we'll remove all and re-insert if anything changed
-					changed = true;
+					needsFullReindex = true;
 					break;
 				}
-
-				// New chunk (note grew)
-				const embedding = await this.plugin.embeddingModel.embed(chunk);
-				await this.plugin.database.insertChunk({
-					noteId: woakiId,
-					filePath: file.path,
-					chunkIndex: i,
-					chunkHash,
-					title: file.basename,
-					content: chunk,
-					tags,
-					embedding,
-					memorizedAt: now,
-					updatedAt: now,
-				});
-				changed = true;
+				newChunkIndices.push(i);
 			}
 
-			if (changed) {
-				// If any existing chunk changed, do a full re-index of this note
+			if (needsFullReindex) {
 				await this.plugin.database.removeNote(woakiId);
 				await this.indexNote(file);
+			} else if (newChunkIndices.length > 0) {
+				const newTexts = newChunkIndices.map(i => chunks[i]!);
+				const embeddings = await this.plugin.embeddingModel.embedBatch(newTexts);
+
+				for (let j = 0; j < newChunkIndices.length; j++) {
+					const i = newChunkIndices[j]!;
+					await this.plugin.database.insertChunk({
+						noteId: woakiId,
+						filePath: file.path,
+						chunkIndex: i,
+						chunkHash: hashes[i]!,
+						title: file.basename,
+						content: chunks[i]!,
+						tags,
+						embedding: embeddings[j]!,
+						memorizedAt: now,
+						updatedAt: now,
+					});
+				}
 			} else {
 				// Just clean up stale chunks if note got shorter
 				await this.plugin.database.removeChunksBeyond(woakiId, chunks.length);

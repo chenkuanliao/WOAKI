@@ -27,6 +27,14 @@ export class WoakiStatusBar {
 		}
 	}
 
+	showProgress(current: number, total: number, label: string): void {
+		this.statusBarEl.setText(`🧠 ${label} (${current}/${total})`);
+	}
+
+	hideProgress(): void {
+		this.update();
+	}
+
 	getMemorizedCount(): number {
 		let count = 0;
 		const files = this.app.vault.getMarkdownFiles();

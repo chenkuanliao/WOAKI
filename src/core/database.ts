@@ -137,27 +137,36 @@ export class WoakiDatabase {
 		return null;
 	}
 
-	async vectorSearch(queryEmbedding: number[], limit = 10): Promise<SearchResult[]> {
+	async vectorSearch(queryEmbedding: number[], limit = 10, tagFilter?: string[]): Promise<SearchResult[]> {
 		if (!this.db) return [];
+		const fetchLimit = tagFilter && tagFilter.length > 0 ? limit * 3 : limit;
 		const results = await search(this.db, {
 			mode: "vector",
 			vector: {
 				value: queryEmbedding,
 				property: "embedding",
 			},
-			limit,
+			limit: fetchLimit,
 			similarity: 0.5,
 		}) as Results<ChunkDocument>;
 
-		return results.hits.map(hit => ({
+		let hits = results.hits.map(hit => ({
 			id: hit.id,
 			score: hit.score,
 			document: hit.document,
 		}));
+
+		if (tagFilter && tagFilter.length > 0) {
+			hits = hits.filter(r => tagFilter.every(t => r.document.tags.includes(t)));
+			hits = hits.slice(0, limit);
+		}
+
+		return hits;
 	}
 
-	async hybridSearch(query: string, queryEmbedding: number[], limit = 10): Promise<SearchResult[]> {
+	async hybridSearch(query: string, queryEmbedding: number[], limit = 10, tagFilter?: string[]): Promise<SearchResult[]> {
 		if (!this.db) return [];
+		const fetchLimit = tagFilter && tagFilter.length > 0 ? limit * 3 : limit;
 		const results = await search(this.db, {
 			mode: "hybrid",
 			term: query,
@@ -166,13 +175,29 @@ export class WoakiDatabase {
 				property: "embedding",
 			},
 			properties: ["content", "title"],
-			limit,
+			limit: fetchLimit,
 			similarity: 0.5,
 		}) as Results<ChunkDocument>;
 
-		return results.hits.map(hit => ({
+		let hits = results.hits.map(hit => ({
 			id: hit.id,
 			score: hit.score,
+			document: hit.document,
+		}));
+
+		if (tagFilter && tagFilter.length > 0) {
+			hits = hits.filter(r => tagFilter.every(t => r.document.tags.includes(t)));
+			hits = hits.slice(0, limit);
+		}
+
+		return hits;
+	}
+
+	async getChunksByNoteId(noteId: string): Promise<SearchResult[]> {
+		const hits = await this.searchByField("noteId", noteId);
+		return hits.map(hit => ({
+			id: hit.id,
+			score: 1.0, // forced inclusion, max score
 			document: hit.document,
 		}));
 	}
@@ -189,6 +214,35 @@ export class WoakiDatabase {
 		} catch {
 			return 0;
 		}
+	}
+
+	async getNoteStats(): Promise<Map<string, { chunkCount: number; updatedAt: number; tags: string; filePath: string; title: string }>> {
+		if (!this.db) return new Map();
+		const results = await search(this.db, {
+			term: "",
+			limit: 100000,
+		}) as Results<ChunkDocument>;
+
+		const stats = new Map<string, { chunkCount: number; updatedAt: number; tags: string; filePath: string; title: string }>();
+		for (const hit of results.hits) {
+			const doc = hit.document;
+			const existing = stats.get(doc.noteId);
+			if (existing) {
+				existing.chunkCount++;
+				if (doc.updatedAt > existing.updatedAt) {
+					existing.updatedAt = doc.updatedAt;
+				}
+			} else {
+				stats.set(doc.noteId, {
+					chunkCount: 1,
+					updatedAt: doc.updatedAt,
+					tags: doc.tags,
+					filePath: doc.filePath,
+					title: doc.title,
+				});
+			}
+		}
+		return stats;
 	}
 
 	async clear(): Promise<void> {

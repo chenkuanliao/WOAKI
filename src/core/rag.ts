@@ -80,6 +80,31 @@ function buildMessages(
     return messages;
 }
 
+export interface RAGOptions {
+    tagFilter?: string[];
+    forcedNoteIds?: string[];
+}
+
+/**
+ * Merge forced-note chunks (at top) with search results, deduplicating by chunk id.
+ */
+async function mergeForced(
+    database: WoakiDatabase,
+    forcedNoteIds: string[],
+    searchResults: SearchResult[],
+): Promise<SearchResult[]> {
+    const forced: SearchResult[] = [];
+    for (const noteId of forcedNoteIds) {
+        const chunks = await database.getChunksByNoteId(noteId);
+        forced.push(...chunks);
+    }
+
+    // Dedup: if a search result has the same noteId as a forced chunk, skip it
+    const forcedNotes = new Set(forcedNoteIds);
+    const filtered = searchResults.filter(r => !forcedNotes.has(r.document.noteId));
+    return [...forced, ...filtered];
+}
+
 /**
  * Non-streaming RAG query. Returns the full response at once.
  */
@@ -90,12 +115,18 @@ export async function ragQuery(
     llmAdapter: LLMAdapter,
     settings: WoakiSettings,
     conversationHistory: ChatMessage[] = [],
+    options: RAGOptions = {},
 ): Promise<RAGResponse> {
     // 1. Embed query
     const queryEmbedding = await embeddingModel.embed(query);
 
-    // 2. Hybrid search
-    const results = await database.hybridSearch(query, queryEmbedding, settings.topK);
+    // 2. Hybrid search with optional tag filter
+    let results = await database.hybridSearch(query, queryEmbedding, settings.topK, options.tagFilter);
+
+    // 2b. Merge forced notes
+    if (options.forcedNoteIds && options.forcedNoteIds.length > 0) {
+        results = await mergeForced(database, options.forcedNoteIds, results);
+    }
 
     // 3. Deduplicate
     const unique = deduplicateByNote(results);
@@ -127,12 +158,18 @@ export async function ragQueryStream(
     onChunk: (text: string) => void,
     onDone: () => void,
     signal?: AbortSignal,
+    options: RAGOptions = {},
 ): Promise<void> {
     // 1. Embed query
     const queryEmbedding = await embeddingModel.embed(query);
 
-    // 2. Hybrid search
-    const results = await database.hybridSearch(query, queryEmbedding, settings.topK);
+    // 2. Hybrid search with optional tag filter
+    let results = await database.hybridSearch(query, queryEmbedding, settings.topK, options.tagFilter);
+
+    // 2b. Merge forced notes
+    if (options.forcedNoteIds && options.forcedNoteIds.length > 0) {
+        results = await mergeForced(database, options.forcedNoteIds, results);
+    }
 
     // 3. Deduplicate
     const unique = deduplicateByNote(results);

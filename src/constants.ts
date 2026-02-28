@@ -10,13 +10,18 @@ export const WOAKI_MEMORIZED_VALUE = "memorized";
 // Command IDs
 export const CMD_MEMORIZE_NOTE = "memorize-note";
 export const CMD_FORGET_NOTE = "forget-note";
+export const CMD_MEMORIZE_FOLDER = "memorize-folder";
 export const CMD_OPEN_CHAT = "open-chat";
+export const CMD_OPEN_MEMORY_STATUS = "open-memory-status";
 export const CMD_REBUILD_DATABASE = "rebuild-database";
 export const CMD_CLEAR_DATABASE = "clear-database";
 
+// Conversation persistence
+export const CONVERSATIONS_DIR = "conversations";
+
 // Icons
 export const ICON_BRAIN = "brain";
-export const ICON_BRAIN_COG = "brain-cog";
+export const ICON_DASHBOARD = "gauge";
 
 // Database
 export const DB_FILENAME = "orama-db.json";
@@ -44,4 +49,4 @@ export const PROVIDER_DEFAULTS: Record<string, { baseUrl: string; model: string 
 };
 
 // RAG
-export const RAG_SYSTEM_PROMPT = `You are a helpful assistant. Answer the user's question using ONLY the provided context from their notes. If the context doesn't contain enough information to answer fully, say so honestly. Always cite which source(s) you used by referencing [Source N].`;
+export const RAG_SYSTEM_PROMPT = `You are a helpful assistant. Answer the user's question using ONLY the provided context from their notes. If the context doesn't contain enough information to answer fully, say so honestly. When citing sources, reference the note by its title using the format 【Note Title】. Do not use generic references like [Source 1].`;

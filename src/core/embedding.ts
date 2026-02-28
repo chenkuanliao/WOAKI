@@ -92,9 +92,16 @@ export class EmbeddingModel {
 	}
 
 	async embedBatch(texts: string[]): Promise<number[][]> {
+		if (texts.length === 0) return [];
+		if (texts.length === 1) return [await this.embed(texts[0]!)];
+
+		await this.ensureLoaded();
+		const output = await this.extractor(texts, { pooling: "mean", normalize: true });
+		const flat = output.data as Float32Array;
+		const dim = 384; // embedding dimensions
 		const results: number[][] = [];
-		for (const text of texts) {
-			results.push(await this.embed(text));
+		for (let i = 0; i < texts.length; i++) {
+			results.push(Array.from(flat.slice(i * dim, (i + 1) * dim)));
 		}
 		return results;
 	}

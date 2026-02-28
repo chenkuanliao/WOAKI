@@ -1,5 +1,6 @@
 import { requestUrl } from "obsidian";
 import type { WoakiSettings } from "../settings";
+import { classifyHttpError, classifyNetworkError, LLMConnectionError } from "../utils/errors";
 
 export interface ChatMessage {
     role: "system" | "user" | "assistant";
@@ -15,6 +16,7 @@ interface LLMProvider {
 
 export class LLMAdapter {
     private provider: LLMProvider;
+    private providerOverride: LLMProvider | null = null;
 
     constructor(settings: WoakiSettings) {
         this.provider = LLMAdapter.buildProvider(settings);
@@ -23,6 +25,32 @@ export class LLMAdapter {
     /** Rebuild provider config when settings change. */
     updateSettings(settings: WoakiSettings): void {
         this.provider = LLMAdapter.buildProvider(settings);
+        this.providerOverride = null;
+    }
+
+    /** Override both provider and model for the current chat session. */
+    setProviderOverride(name: string, model: string, apiKey?: string, baseUrl?: string): void {
+        this.providerOverride = { name, model, apiKey, baseUrl: baseUrl ?? "" };
+    }
+
+    /** Clear the provider override, reverting to settings defaults. */
+    clearOverride(): void {
+        this.providerOverride = null;
+    }
+
+    /** Returns the active model: override if set, else provider default. */
+    getActiveModel(): string {
+        return (this.providerOverride ?? this.provider).model;
+    }
+
+    /** Returns the current provider name (e.g. "OpenAI", "Ollama", "Anthropic"). */
+    getProviderName(): string {
+        return (this.providerOverride ?? this.provider).name;
+    }
+
+    /** Get the active provider (override or default). */
+    private getActiveProvider(): LLMProvider {
+        return this.providerOverride ?? this.provider;
     }
 
     private static buildProvider(settings: WoakiSettings): LLMProvider {
@@ -53,36 +81,46 @@ export class LLMAdapter {
 
     /** Non-streaming chat completion using Obsidian's requestUrl (avoids CORS). */
     async chat(messages: ChatMessage[]): Promise<{ content: string }> {
-        if (this.provider.name === "Anthropic") {
-            return this.chatAnthropic(messages);
-        }
+        return this.withRetry(async () => {
+            const p = this.getActiveProvider();
+            if (p.name === "Anthropic") {
+                return this.chatAnthropic(messages);
+            }
 
-        const headers: Record<string, string> = {
-            "Content-Type": "application/json",
-        };
-        if (this.provider.apiKey) {
-            headers["Authorization"] = `Bearer ${this.provider.apiKey}`;
-        }
+            const headers: Record<string, string> = {
+                "Content-Type": "application/json",
+            };
+            if (p.apiKey) {
+                headers["Authorization"] = `Bearer ${p.apiKey}`;
+            }
 
-        const url = this.provider.name === "Ollama"
-            ? `${this.provider.baseUrl}/api/chat`
-            : `${this.provider.baseUrl}/v1/chat/completions`;
+            const url = p.name === "Ollama"
+                ? `${p.baseUrl}/api/chat`
+                : `${p.baseUrl}/v1/chat/completions`;
 
-        const body = this.provider.name === "Ollama"
-            ? { model: this.provider.model, messages, stream: false }
-            : { model: this.provider.model, messages, stream: false };
+            const body = { model: this.getActiveModel(), messages, stream: false };
 
-        const response = await requestUrl({
-            url,
-            method: "POST",
-            headers,
-            body: JSON.stringify(body),
+            try {
+                const response = await requestUrl({
+                    url,
+                    method: "POST",
+                    headers,
+                    body: JSON.stringify(body),
+                });
+
+                if (p.name === "Ollama") {
+                    return { content: response.json.message?.content ?? "" };
+                }
+                return { content: response.json.choices[0].message.content };
+            } catch (e: unknown) {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const status = (e as any)?.status;
+                if (typeof status === "number") {
+                    throw classifyHttpError(status, String(e), p.name);
+                }
+                throw classifyNetworkError(e, p.name);
+            }
         });
-
-        if (this.provider.name === "Ollama") {
-            return { content: response.json.message?.content ?? "" };
-        }
-        return { content: response.json.choices[0].message.content };
     }
 
     /** Streaming chat completion via fetch + SSE. */
@@ -92,33 +130,39 @@ export class LLMAdapter {
         onDone: () => void,
         signal?: AbortSignal,
     ): Promise<void> {
-        if (this.provider.name === "Anthropic") {
+        const p = this.getActiveProvider();
+        if (p.name === "Anthropic") {
             return this.chatStreamAnthropic(messages, onChunk, onDone, signal);
         }
 
         const headers: Record<string, string> = {
             "Content-Type": "application/json",
         };
-        if (this.provider.apiKey) {
-            headers["Authorization"] = `Bearer ${this.provider.apiKey}`;
+        if (p.apiKey) {
+            headers["Authorization"] = `Bearer ${p.apiKey}`;
         }
 
-        const url = this.provider.name === "Ollama"
-            ? `${this.provider.baseUrl}/api/chat`
-            : `${this.provider.baseUrl}/v1/chat/completions`;
+        const url = p.name === "Ollama"
+            ? `${p.baseUrl}/api/chat`
+            : `${p.baseUrl}/v1/chat/completions`;
 
-        const body = { model: this.provider.model, messages, stream: true };
+        const body = { model: this.getActiveModel(), messages, stream: true };
 
-        const response = await fetch(url, {
-            method: "POST",
-            headers,
-            body: JSON.stringify(body),
-            signal,
-        });
+        let response: Response;
+        try {
+            response = await fetch(url, {
+                method: "POST",
+                headers,
+                body: JSON.stringify(body),
+                signal,
+            });
+        } catch (e) {
+            throw classifyNetworkError(e, p.name);
+        }
 
         if (!response.ok) {
             const errorText = await response.text();
-            throw new Error(`LLM request failed (${response.status}): ${errorText}`);
+            throw classifyHttpError(response.status, errorText, p.name);
         }
 
         const reader = response.body!.getReader();
@@ -135,8 +179,7 @@ export class LLMAdapter {
                 buffer = lines.pop() ?? "";
 
                 for (const line of lines) {
-                    if (this.provider.name === "Ollama") {
-                        // Ollama streams JSON objects, one per line
+                    if (p.name === "Ollama") {
                         const trimmed = line.trim();
                         if (!trimmed) continue;
                         try {
@@ -150,7 +193,6 @@ export class LLMAdapter {
                             }
                         } catch { /* skip malformed lines */ }
                     } else {
-                        // OpenAI SSE format
                         if (line.startsWith("data: ")) {
                             const data = line.slice(6);
                             if (data === "[DONE]") {
@@ -174,23 +216,23 @@ export class LLMAdapter {
 
     /** Test if the LLM provider is reachable. */
     async testConnection(): Promise<{ ok: boolean; error?: string }> {
+        const p = this.getActiveProvider();
         try {
             let url: string;
-            if (this.provider.name === "Ollama") {
-                url = `${this.provider.baseUrl}/api/tags`;
-            } else if (this.provider.name === "Anthropic") {
-                // Anthropic doesn't have a model-list endpoint; do a minimal completion
+            if (p.name === "Ollama") {
+                url = `${p.baseUrl}/api/tags`;
+            } else if (p.name === "Anthropic") {
                 const res = await this.chat([
                     { role: "user", content: "Say 'ok'" },
                 ]);
                 return { ok: !!res.content };
             } else {
-                url = `${this.provider.baseUrl}/v1/models`;
+                url = `${p.baseUrl}/v1/models`;
             }
 
             const headers: Record<string, string> = {};
-            if (this.provider.apiKey) {
-                headers["Authorization"] = `Bearer ${this.provider.apiKey}`;
+            if (p.apiKey) {
+                headers["Authorization"] = `Bearer ${p.apiKey}`;
             }
 
             const response = await requestUrl({ url, method: "GET", headers });
@@ -201,51 +243,104 @@ export class LLMAdapter {
         }
     }
 
+    /** Test connection for a specific provider config. */
+    async testProviderConnection(name: string, apiKey: string, baseUrl: string): Promise<{ ok: boolean; error?: string }> {
+        const saved = this.providerOverride;
+        this.providerOverride = { name, model: "", apiKey, baseUrl };
+        try {
+            return await this.testConnection();
+        } finally {
+            this.providerOverride = saved;
+        }
+    }
+
+    /** List models for a specific provider config (does not affect current override). */
+    async listModelsForProvider(name: string, apiKey: string, baseUrl: string): Promise<string[]> {
+        const saved = this.providerOverride;
+        this.providerOverride = { name, model: "", apiKey, baseUrl };
+        try {
+            return await this.listModels();
+        } finally {
+            this.providerOverride = saved;
+        }
+    }
+
     /** List available models from the provider. */
     async listModels(): Promise<string[]> {
+        const p = this.getActiveProvider();
         try {
             let url: string;
             const headers: Record<string, string> = {};
 
-            if (this.provider.name === "Ollama") {
-                url = `${this.provider.baseUrl}/api/tags`;
+            if (p.name === "Ollama") {
+                url = `${p.baseUrl}/api/tags`;
                 const response = await requestUrl({ url, method: "GET", headers });
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 return response.json.models?.map((m: any) => m.name) ?? [];
-            } else if (this.provider.name === "Anthropic") {
-                // Anthropic doesn't expose a model list endpoint
-                return ["claude-sonnet-4-5-20250929", "claude-3-5-haiku-20241022", "claude-3-opus-20240229"];
+            } else if (p.name === "Anthropic") {
+                return [
+                    "claude-opus-4-6",
+                    "claude-sonnet-4-5-20250929",
+                    "claude-haiku-4-5-20251001",
+                    "claude-3-5-haiku-20241022",
+                    "claude-3-opus-20240229",
+                ];
             } else {
-                url = `${this.provider.baseUrl}/v1/models`;
-                if (this.provider.apiKey) {
-                    headers["Authorization"] = `Bearer ${this.provider.apiKey}`;
+                url = `${p.baseUrl}/v1/models`;
+                if (p.apiKey) {
+                    headers["Authorization"] = `Bearer ${p.apiKey}`;
                 }
                 const response = await requestUrl({ url, method: "GET", headers });
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                return response.json.data?.map((m: any) => m.id) ?? [];
+                const allModels: string[] = response.json.data?.map((m: any) => m.id) ?? [];
+                const chatPrefixes = ["gpt-", "o1-", "o3-", "o4-", "chatgpt-"];
+                return allModels
+                    .filter(id => chatPrefixes.some(pfx => id.startsWith(pfx)))
+                    .sort();
             }
         } catch {
             return [];
         }
     }
 
+    // --- Retry helper ---
+
+    private async withRetry<T>(fn: () => Promise<T>, maxAttempts = 3): Promise<T> {
+        const delays = [1000, 2000, 4000];
+        let lastError: unknown;
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            try {
+                return await fn();
+            } catch (e) {
+                lastError = e;
+                if (e instanceof LLMConnectionError && e.retryable && attempt < maxAttempts - 1) {
+                    await new Promise(resolve => setTimeout(resolve, delays[attempt]));
+                    continue;
+                }
+                throw e;
+            }
+        }
+        throw lastError;
+    }
+
     // --- Anthropic-specific methods ---
 
     private async chatAnthropic(messages: ChatMessage[]): Promise<{ content: string }> {
+        const p = this.getActiveProvider();
         const systemMsg = messages.find((m) => m.role === "system");
         const nonSystemMsgs = messages
             .filter((m) => m.role !== "system")
             .map((m) => ({ role: m.role, content: m.content }));
 
-        const url = `${this.provider.baseUrl}/v1/messages`;
+        const url = `${p.baseUrl}/v1/messages`;
         const headers: Record<string, string> = {
             "Content-Type": "application/json",
-            "x-api-key": this.provider.apiKey ?? "",
+            "x-api-key": p.apiKey ?? "",
             "anthropic-version": "2023-06-01",
         };
 
         const body: Record<string, unknown> = {
-            model: this.provider.model,
+            model: this.getActiveModel(),
             max_tokens: 4096,
             messages: nonSystemMsgs,
         };
@@ -253,16 +348,25 @@ export class LLMAdapter {
             body.system = systemMsg.content;
         }
 
-        const response = await requestUrl({
-            url,
-            method: "POST",
-            headers,
-            body: JSON.stringify(body),
-        });
+        try {
+            const response = await requestUrl({
+                url,
+                method: "POST",
+                headers,
+                body: JSON.stringify(body),
+            });
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const textBlock = response.json.content?.find((b: any) => b.type === "text");
-        return { content: textBlock?.text ?? "" };
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const textBlock = response.json.content?.find((b: any) => b.type === "text");
+            return { content: textBlock?.text ?? "" };
+        } catch (e: unknown) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const status = (e as any)?.status;
+            if (typeof status === "number") {
+                throw classifyHttpError(status, String(e), "Anthropic");
+            }
+            throw classifyNetworkError(e, "Anthropic");
+        }
     }
 
     private async chatStreamAnthropic(
@@ -271,20 +375,21 @@ export class LLMAdapter {
         onDone: () => void,
         signal?: AbortSignal,
     ): Promise<void> {
+        const p = this.getActiveProvider();
         const systemMsg = messages.find((m) => m.role === "system");
         const nonSystemMsgs = messages
             .filter((m) => m.role !== "system")
             .map((m) => ({ role: m.role, content: m.content }));
 
-        const url = `${this.provider.baseUrl}/v1/messages`;
+        const url = `${p.baseUrl}/v1/messages`;
         const headers: Record<string, string> = {
             "Content-Type": "application/json",
-            "x-api-key": this.provider.apiKey ?? "",
+            "x-api-key": p.apiKey ?? "",
             "anthropic-version": "2023-06-01",
         };
 
         const body: Record<string, unknown> = {
-            model: this.provider.model,
+            model: this.getActiveModel(),
             max_tokens: 4096,
             messages: nonSystemMsgs,
             stream: true,
@@ -293,16 +398,21 @@ export class LLMAdapter {
             body.system = systemMsg.content;
         }
 
-        const response = await fetch(url, {
-            method: "POST",
-            headers,
-            body: JSON.stringify(body),
-            signal,
-        });
+        let response: Response;
+        try {
+            response = await fetch(url, {
+                method: "POST",
+                headers,
+                body: JSON.stringify(body),
+                signal,
+            });
+        } catch (e) {
+            throw classifyNetworkError(e, "Anthropic");
+        }
 
         if (!response.ok) {
             const errorText = await response.text();
-            throw new Error(`Anthropic request failed (${response.status}): ${errorText}`);
+            throw classifyHttpError(response.status, errorText, "Anthropic");
         }
 
         const reader = response.body!.getReader();
