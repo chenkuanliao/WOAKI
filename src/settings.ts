@@ -1,5 +1,5 @@
-import {App, PluginSettingTab, Setting} from "obsidian";
-import {EMBEDDING_MODELS} from "./constants";
+import { App, PluginSettingTab, Setting } from "obsidian";
+import { EMBEDDING_MODELS } from "./constants";
 import type WoakiPlugin from "./main";
 
 export interface WoakiSettings {
@@ -51,11 +51,11 @@ export class WoakiSettingTab extends PluginSettingTab {
 	}
 
 	async display(): Promise<void> {
-		const {containerEl} = this;
+		const { containerEl } = this;
 		containerEl.empty();
 
 		// --- LLM Provider ---
-		containerEl.createEl("h2", {text: "LLM Provider"});
+		containerEl.createEl("h2", { text: "LLM Provider" });
 
 		new Setting(containerEl)
 			.setName("Provider")
@@ -68,18 +68,79 @@ export class WoakiSettingTab extends PluginSettingTab {
 				.onChange(async (value) => {
 					this.plugin.settings.llmProvider = value as WoakiSettings["llmProvider"];
 					await this.plugin.saveSettings();
+					this.display(); // Re-render to update model list/fields
 				}));
 
-		new Setting(containerEl)
+		const modelSetting = new Setting(containerEl)
 			.setName("Model")
-			.setDesc("The model name to use (e.g. gpt-4o-mini, claude-sonnet-4-5-20250929).")
-			.addText(text => text
-				.setPlaceholder("gpt-4o-mini")
+			.setDesc("The model name to use (e.g. gpt-4o-mini, ollama-model).");
+
+		if (this.plugin.settings.llmProvider === "ollama") {
+			const models = await this.plugin.llmAdapter.listModels();
+			if (models.length > 0) {
+				modelSetting.addDropdown(dropdown => {
+					for (const model of models) {
+						dropdown.addOption(model, model);
+					}
+					// Add custom option in case user wants to type one manually
+					dropdown.addOption("__custom__", "Custom...");
+
+					const currentModel = this.plugin.settings.llmModel;
+					if (models.includes(currentModel)) {
+						dropdown.setValue(currentModel);
+					} else {
+						dropdown.setValue("__custom__");
+					}
+
+					dropdown.onChange(async (value) => {
+						if (value === "__custom__") {
+							this.display(); // Re-render to show text input
+						} else {
+							this.plugin.settings.llmModel = value;
+							await this.plugin.saveSettings();
+						}
+					});
+				});
+
+				// Add refresh button for Ollama
+				modelSetting.addButton(btn => btn
+					.setIcon("refresh-cw")
+					.setTooltip("Refresh Ollama models")
+					.onClick(async () => {
+						this.display();
+					}));
+
+				// If custom is selected (or not in list), show text input as well
+				if (!models.includes(this.plugin.settings.llmModel)) {
+					modelSetting.addText(text => text
+						.setPlaceholder("Enter model name...")
+						.setValue(this.plugin.settings.llmModel)
+						.onChange(async (value) => {
+							this.plugin.settings.llmModel = value;
+							await this.plugin.saveSettings();
+						}));
+				}
+			} else {
+				// No models found or Ollama unreachable
+				modelSetting.addText(text => text
+					.setPlaceholder("llama3.2")
+					.setValue(this.plugin.settings.llmModel)
+					.onChange(async (value) => {
+						this.plugin.settings.llmModel = value;
+						await this.plugin.saveSettings();
+					}));
+				modelSetting.setDesc("Could not fetch Ollama models. Ensure Ollama is running or enter model name manually.");
+			}
+		} else {
+			// OpenAI / Anthropic
+			modelSetting.addText(text => text
+				.setPlaceholder(this.plugin.settings.llmProvider === "openai" ? "gpt-4o-mini" : "claude-sonnet-4-5-20250929")
 				.setValue(this.plugin.settings.llmModel)
 				.onChange(async (value) => {
 					this.plugin.settings.llmModel = value;
 					await this.plugin.saveSettings();
 				}));
+		}
 
 		new Setting(containerEl)
 			.setName("API Key")
@@ -103,10 +164,38 @@ export class WoakiSettingTab extends PluginSettingTab {
 				.onChange(async (value) => {
 					this.plugin.settings.llmBaseUrl = value;
 					await this.plugin.saveSettings();
+					if (this.plugin.settings.llmProvider === "ollama") {
+						this.display(); // Refresh models if base URL changed
+					}
 				}));
 
+		// Test Connection
+		const testSetting = new Setting(containerEl)
+			.setName("Test connection")
+			.setDesc("Verify the LLM provider is reachable.");
+		testSetting.addButton(btn => btn
+			.setButtonText("Test")
+			.onClick(async () => {
+				btn.setButtonText("Testing...");
+				btn.setDisabled(true);
+				try {
+					const result = await this.plugin.llmAdapter.testConnection();
+					if (result.ok) {
+						testSetting.setDesc("✅ Connection successful!");
+					} else {
+						testSetting.setDesc(`❌ Connection failed: ${result.error ?? "Unknown error"}`);
+					}
+				} catch (e: unknown) {
+					const msg = e instanceof Error ? e.message : String(e);
+					testSetting.setDesc(`❌ Connection failed: ${msg}`);
+				} finally {
+					btn.setButtonText("Test");
+					btn.setDisabled(false);
+				}
+			}));
+
 		// --- Embedding ---
-		containerEl.createEl("h2", {text: "Embedding"});
+		containerEl.createEl("h2", { text: "Embedding" });
 
 		new Setting(containerEl)
 			.setName("Embedding model")
@@ -127,7 +216,7 @@ export class WoakiSettingTab extends PluginSettingTab {
 			});
 
 		// --- RAG ---
-		containerEl.createEl("h2", {text: "RAG Settings"});
+		containerEl.createEl("h2", { text: "RAG Settings" });
 
 		new Setting(containerEl)
 			.setName("Chunk size")
@@ -172,7 +261,7 @@ export class WoakiSettingTab extends PluginSettingTab {
 				}));
 
 		// --- Status ---
-		containerEl.createEl("h2", {text: "About"});
+		containerEl.createEl("h2", { text: "About" });
 
 		const memorizedCount = this.plugin.statusBar.getMemorizedCount();
 		const chunkCount = this.plugin.database.getDocumentCount();

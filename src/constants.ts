@@ -26,12 +26,22 @@ export const DEFAULT_CHUNK_SIZE = 1000;
 export const REINDEX_DEBOUNCE_MS = 5000;
 
 // Available embedding models (label, HuggingFace ID, dimensions)
-export const EMBEDDING_MODELS: Array<{id: string; label: string; dimensions: number}> = [
-	{id: "TaylorAI/bge-micro-v2", label: "BGE Micro v2 (23 MB)", dimensions: 384},
-	{id: "Xenova/all-MiniLM-L6-v2", label: "MiniLM L6 v2 (90 MB)", dimensions: 384},
-	{id: "Xenova/bge-small-en-v1.5", label: "BGE Small EN v1.5 (130 MB)", dimensions: 384},
-	{id: "Xenova/bge-base-en-v1.5", label: "BGE Base EN v1.5 (430 MB)", dimensions: 768},
+export const EMBEDDING_MODELS: Array<{ id: string; label: string; dimensions: number }> = [
+	{ id: "TaylorAI/bge-micro-v2", label: "BGE Micro v2 (23 MB)", dimensions: 384 },
+	{ id: "Xenova/all-MiniLM-L6-v2", label: "MiniLM L6 v2 (90 MB)", dimensions: 384 },
+	{ id: "Xenova/bge-small-en-v1.5", label: "BGE Small EN v1.5 (130 MB)", dimensions: 384 },
+	{ id: "Xenova/bge-base-en-v1.5", label: "BGE Base EN v1.5 (430 MB)", dimensions: 768 },
 ];
 
 // Plugin
 export const PLUGIN_DISPLAY_NAME = "WOAKI";
+
+// LLM Provider defaults
+export const PROVIDER_DEFAULTS: Record<string, { baseUrl: string; model: string }> = {
+	openai: { baseUrl: "https://api.openai.com", model: "gpt-4o-mini" },
+	anthropic: { baseUrl: "https://api.anthropic.com", model: "claude-sonnet-4-5-20250929" },
+	ollama: { baseUrl: "http://localhost:11434", model: "llama3.2" },
+};
+
+// RAG
+export const RAG_SYSTEM_PROMPT = `You are a helpful assistant. Answer the user's question using ONLY the provided context from their notes. If the context doesn't contain enough information to answer fully, say so honestly. Always cite which source(s) you used by referencing [Source N].`;
