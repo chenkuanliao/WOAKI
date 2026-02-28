@@ -4,6 +4,7 @@ import {WOAKI_PROPERTY, WOAKI_MEMORIZED_VALUE} from "../constants";
 export class WoakiStatusBar {
 	private statusBarEl: HTMLElement;
 	private app: App;
+	private indexing = false;
 
 	constructor(statusBarEl: HTMLElement, app: App) {
 		this.statusBarEl = statusBarEl;
@@ -12,8 +13,18 @@ export class WoakiStatusBar {
 	}
 
 	update(): void {
+		if (this.indexing) return;
 		const count = this.getMemorizedCount();
 		this.statusBarEl.setText(`🧠 ${count} memorized`);
+	}
+
+	setIndexing(active: boolean): void {
+		this.indexing = active;
+		if (active) {
+			this.statusBarEl.setText("🧠 Indexing...");
+		} else {
+			this.update();
+		}
 	}
 
 	getMemorizedCount(): number {

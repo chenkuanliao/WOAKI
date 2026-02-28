@@ -1,4 +1,5 @@
 import {App, PluginSettingTab, Setting} from "obsidian";
+import {EMBEDDING_MODELS} from "./constants";
 import type WoakiPlugin from "./main";
 
 export interface WoakiSettings {
@@ -29,8 +30,8 @@ export const DEFAULT_SETTINGS: WoakiSettings = {
 	llmBaseUrl: "",
 
 	// Embedding settings
-	embeddingModel: "text-embedding-3-small",
-	embeddingDimensions: 1536,
+	embeddingModel: "TaylorAI/bge-micro-v2",
+	embeddingDimensions: 384,
 
 	// RAG settings
 	chunkSize: 1000,
@@ -49,7 +50,7 @@ export class WoakiSettingTab extends PluginSettingTab {
 		this.plugin = plugin;
 	}
 
-	display(): void {
+	async display(): Promise<void> {
 		const {containerEl} = this;
 		containerEl.empty();
 
@@ -109,14 +110,21 @@ export class WoakiSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName("Embedding model")
-			.setDesc("Model used to generate embeddings for memorized notes.")
-			.addText(text => text
-				.setPlaceholder("text-embedding-3-small")
-				.setValue(this.plugin.settings.embeddingModel)
-				.onChange(async (value) => {
+			.setDesc("Model used to generate embeddings for memorized notes. Larger models are more accurate but slower to download and run.")
+			.addDropdown(dropdown => {
+				for (const model of EMBEDDING_MODELS) {
+					dropdown.addOption(model.id, model.label);
+				}
+				dropdown.setValue(this.plugin.settings.embeddingModel);
+				dropdown.onChange(async (value) => {
 					this.plugin.settings.embeddingModel = value;
+					const model = EMBEDDING_MODELS.find(m => m.id === value);
+					if (model) {
+						this.plugin.settings.embeddingDimensions = model.dimensions;
+					}
 					await this.plugin.saveSettings();
-				}));
+				});
+			});
 
 		// --- RAG ---
 		containerEl.createEl("h2", {text: "RAG Settings"});
@@ -167,8 +175,24 @@ export class WoakiSettingTab extends PluginSettingTab {
 		containerEl.createEl("h2", {text: "About"});
 
 		const memorizedCount = this.plugin.statusBar.getMemorizedCount();
+		const chunkCount = this.plugin.database.getDocumentCount();
+		const dbSizeBytes = await this.plugin.database.getDbFileSize();
+		const dbSize = this.formatBytes(dbSizeBytes);
+
 		new Setting(containerEl)
 			.setName("Memorized notes")
-			.setDesc(`${memorizedCount} note${memorizedCount === 1 ? "" : "s"} currently memorized.`);
+			.setDesc(`${memorizedCount} note${memorizedCount === 1 ? "" : "s"} currently memorized (${chunkCount} chunk${chunkCount === 1 ? "" : "s"} in database).`);
+
+		new Setting(containerEl)
+			.setName("Database size")
+			.setDesc(`${dbSize} on disk (${this.plugin.manifest.dir}/orama-db.json).`);
+	}
+
+	private formatBytes(bytes: number): string {
+		if (bytes === 0) return "0 B";
+		const units = ["B", "KB", "MB", "GB"];
+		const i = Math.floor(Math.log(bytes) / Math.log(1024));
+		const size = bytes / Math.pow(1024, i);
+		return `${size.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
 	}
 }

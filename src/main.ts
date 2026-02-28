@@ -1,9 +1,11 @@
-import {MarkdownView, Plugin, TFile, Menu} from "obsidian";
-import {DEFAULT_SETTINGS, WoakiSettings, WoakiSettingTab} from "./settings";
-import {MemoryManager} from "./core/memory-manager";
-import {WoakiStatusBar} from "./ui/status-bar";
-import {showComingSoonNotice} from "./ui/notices";
-import {isNoteMemorized} from "./utils/frontmatter";
+import { MarkdownView, Plugin, TFile, Menu } from "obsidian";
+import { DEFAULT_SETTINGS, WoakiSettings, WoakiSettingTab } from "./settings";
+import { MemoryManager } from "./core/memory-manager";
+import { WoakiDatabase } from "./core/database";
+import { EmbeddingModel } from "./core/embedding";
+import { WoakiStatusBar } from "./ui/status-bar";
+import { showComingSoonNotice, showNotice } from "./ui/notices";
+import { isNoteMemorized } from "./utils/frontmatter";
 import {
 	CMD_MEMORIZE_NOTE,
 	CMD_FORGET_NOTE,
@@ -16,11 +18,18 @@ import {
 
 export default class WoakiPlugin extends Plugin {
 	settings: WoakiSettings;
+	database: WoakiDatabase;
+	embeddingModel: EmbeddingModel;
 	memoryManager: MemoryManager;
 	statusBar: WoakiStatusBar;
 
 	async onload() {
 		await this.loadSettings();
+
+		this.database = new WoakiDatabase(this);
+		await this.database.initialize();
+
+		this.embeddingModel = new EmbeddingModel(this.settings.embeddingModel, this.app, this.manifest.dir!);
 
 		this.memoryManager = new MemoryManager(this);
 
@@ -43,7 +52,13 @@ export default class WoakiPlugin extends Plugin {
 
 		this.app.workspace.onLayoutReady(() => {
 			this.statusBar.update();
+			this.memoryManager.syncOnStartup();
 		});
+	}
+
+	async onunload() {
+		await this.database.persist();
+		this.embeddingModel.dispose();
 	}
 
 	private registerCommands(): void {
@@ -88,16 +103,17 @@ export default class WoakiPlugin extends Plugin {
 		this.addCommand({
 			id: CMD_REBUILD_DATABASE,
 			name: "Rebuild memory database",
-			callback: () => {
-				showComingSoonNotice("Rebuild database");
+			callback: async () => {
+				await this.memoryManager.rebuildDatabase();
 			},
 		});
 
 		this.addCommand({
 			id: CMD_CLEAR_DATABASE,
 			name: "Clear memory database",
-			callback: () => {
-				showComingSoonNotice("Clear database");
+			callback: async () => {
+				showNotice("Clearing memory database...");
+				await this.memoryManager.clearDatabase();
 			},
 		});
 	}
@@ -132,8 +148,11 @@ export default class WoakiPlugin extends Plugin {
 
 	private registerMetadataCacheEvents(): void {
 		this.registerEvent(
-			this.app.metadataCache.on("changed", () => {
+			this.app.metadataCache.on("changed", (file) => {
 				this.statusBar.update();
+				if (file instanceof TFile) {
+					this.memoryManager.handleFileChange(file);
+				}
 			})
 		);
 	}
@@ -154,6 +173,13 @@ export default class WoakiPlugin extends Plugin {
 
 	async loadSettings() {
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<WoakiSettings>);
+
+		// Migrate Phase 1 embedding settings to local model
+		if (this.settings.embeddingModel === "text-embedding-3-small") {
+			this.settings.embeddingModel = DEFAULT_SETTINGS.embeddingModel;
+			this.settings.embeddingDimensions = DEFAULT_SETTINGS.embeddingDimensions;
+			await this.saveSettings();
+		}
 	}
 
 	async saveSettings() {
