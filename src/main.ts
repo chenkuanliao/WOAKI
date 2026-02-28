@@ -1,99 +1,162 @@
-import {App, Editor, MarkdownView, Modal, Notice, Plugin} from 'obsidian';
-import {DEFAULT_SETTINGS, MyPluginSettings, SampleSettingTab} from "./settings";
+import {MarkdownView, Plugin, TFile, Menu} from "obsidian";
+import {DEFAULT_SETTINGS, WoakiSettings, WoakiSettingTab} from "./settings";
+import {MemoryManager} from "./core/memory-manager";
+import {WoakiStatusBar} from "./ui/status-bar";
+import {showComingSoonNotice} from "./ui/notices";
+import {isNoteMemorized} from "./utils/frontmatter";
+import {
+	CMD_MEMORIZE_NOTE,
+	CMD_FORGET_NOTE,
+	CMD_OPEN_CHAT,
+	CMD_REBUILD_DATABASE,
+	CMD_CLEAR_DATABASE,
+	ICON_BRAIN,
+	PLUGIN_DISPLAY_NAME,
+} from "./constants";
 
-// Remember to rename these classes and interfaces!
-
-export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings;
+export default class WoakiPlugin extends Plugin {
+	settings: WoakiSettings;
+	memoryManager: MemoryManager;
+	statusBar: WoakiStatusBar;
 
 	async onload() {
 		await this.loadSettings();
 
-		// This creates an icon in the left ribbon.
-		this.addRibbonIcon('dice', 'Sample', (evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
-		});
+		this.memoryManager = new MemoryManager(this);
 
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status bar text');
+		const statusBarEl = this.addStatusBarItem();
+		this.statusBar = new WoakiStatusBar(statusBarEl, this.app);
 
-		// This adds a simple command that can be triggered anywhere
-		this.addCommand({
-			id: 'open-modal-simple',
-			name: 'Open modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
+		this.registerCommands();
+		this.registerContextMenu();
+		this.registerFileEvents();
+		this.registerMetadataCacheEvents();
+
+		this.addRibbonIcon(ICON_BRAIN, `${PLUGIN_DISPLAY_NAME}: Memorize current note`, async () => {
+			const file = this.app.workspace.getActiveFile();
+			if (file) {
+				await this.memoryManager.memorizeNote(file);
 			}
 		});
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: 'replace-selected',
-			name: 'Replace selected content',
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				editor.replaceSelection('Sample editor command');
-			}
+
+		this.addSettingTab(new WoakiSettingTab(this.app, this));
+
+		this.app.workspace.onLayoutReady(() => {
+			this.statusBar.update();
 		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
+	}
+
+	private registerCommands(): void {
 		this.addCommand({
-			id: 'open-modal-complex',
-			name: 'Open modal (complex)',
+			id: CMD_MEMORIZE_NOTE,
+			name: "Memorize current note",
 			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
+				const file = this.app.workspace.getActiveViewOfType(MarkdownView)?.file;
+				if (file) {
 					if (!checking) {
-						new SampleModal(this.app).open();
+						this.memoryManager.memorizeNote(file);
 					}
-
-					// This command will only show up in Command Palette when the check function returns true
 					return true;
 				}
 				return false;
-			}
+			},
 		});
 
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
-
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			new Notice("Click");
+		this.addCommand({
+			id: CMD_FORGET_NOTE,
+			name: "Forget current note",
+			checkCallback: (checking: boolean) => {
+				const file = this.app.workspace.getActiveViewOfType(MarkdownView)?.file;
+				if (file && isNoteMemorized(this.app, file)) {
+					if (!checking) {
+						this.memoryManager.unmemorizeNote(file);
+					}
+					return true;
+				}
+				return false;
+			},
 		});
 
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
+		this.addCommand({
+			id: CMD_OPEN_CHAT,
+			name: "Open WOAKI Chat",
+			callback: () => {
+				showComingSoonNotice("WOAKI Chat");
+			},
+		});
 
+		this.addCommand({
+			id: CMD_REBUILD_DATABASE,
+			name: "Rebuild memory database",
+			callback: () => {
+				showComingSoonNotice("Rebuild database");
+			},
+		});
+
+		this.addCommand({
+			id: CMD_CLEAR_DATABASE,
+			name: "Clear memory database",
+			callback: () => {
+				showComingSoonNotice("Clear database");
+			},
+		});
 	}
 
-	onunload() {
+	private registerContextMenu(): void {
+		this.registerEvent(
+			this.app.workspace.on("file-menu", (menu: Menu, file) => {
+				if (!(file instanceof TFile) || file.extension !== "md") {
+					return;
+				}
+
+				if (isNoteMemorized(this.app, file)) {
+					menu.addItem((item) => {
+						item.setTitle(`${PLUGIN_DISPLAY_NAME}: Forget this note`)
+							.setIcon("trash")
+							.onClick(async () => {
+								await this.memoryManager.unmemorizeNote(file);
+							});
+					});
+				} else {
+					menu.addItem((item) => {
+						item.setTitle(`${PLUGIN_DISPLAY_NAME}: Memorize this note`)
+							.setIcon(ICON_BRAIN)
+							.onClick(async () => {
+								await this.memoryManager.memorizeNote(file);
+							});
+					});
+				}
+			})
+		);
+	}
+
+	private registerMetadataCacheEvents(): void {
+		this.registerEvent(
+			this.app.metadataCache.on("changed", () => {
+				this.statusBar.update();
+			})
+		);
+	}
+
+	private registerFileEvents(): void {
+		this.registerEvent(
+			this.app.vault.on("delete", (file) => {
+				this.memoryManager.handleFileDelete(file);
+			})
+		);
+
+		this.registerEvent(
+			this.app.vault.on("rename", (file, oldPath) => {
+				this.memoryManager.handleFileRename(file, oldPath);
+			})
+		);
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<MyPluginSettings>);
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<WoakiSettings>);
 	}
 
 	async saveSettings() {
 		await this.saveData(this.settings);
-	}
-}
-
-class SampleModal extends Modal {
-	constructor(app: App) {
-		super(app);
-	}
-
-	onOpen() {
-		let {contentEl} = this;
-		contentEl.setText('Woah!');
-	}
-
-	onClose() {
-		const {contentEl} = this;
-		contentEl.empty();
 	}
 }
