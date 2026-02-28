@@ -90,7 +90,7 @@ export class WoakiChatView extends ItemView {
             cls: "woaki-model-badge-text",
         });
         modelBadge.createSpan({ text: "▾", cls: "woaki-model-badge-chevron" });
-        modelBadge.setAttribute("title", `Provider: ${this.plugin.settings.llmProvider}`);
+        modelBadge.setAttribute("title", `Provider: ${this.plugin.llmAdapter.getProviderName()}`);
 
         this.modelBadgeTextEl = modelText;
 
@@ -324,18 +324,19 @@ export class WoakiChatView extends ItemView {
      * Extract @[[NoteName]] references from input. Returns cleaned query and note IDs.
      */
     private parseNoteReferences(input: string): { cleanQuery: string; noteIds: string[] } {
-        const noteRefRegex = /@\[\[([^\]]+)\]\]/g;
+        // Support @[[Note Name]] and @[Note Name]
+        const noteRefRegex = /@\[\[?([^\]]+?)\]?\]/g;
         const noteIds: string[] = [];
         let match;
         while ((match = noteRefRegex.exec(input)) !== null) {
-            const name = match[1]!;
+            const name = match[1]!.trim();
             const file = this.app.metadataCache.getFirstLinkpathDest(name, "");
             if (file) {
                 const id = getWoakiId(this.app, file);
                 if (id) noteIds.push(id);
             }
         }
-        const cleanQuery = input.replace(/@\[\[[^\]]+\]\]/g, "").replace(/\s+/g, " ").trim();
+        const cleanQuery = input.replace(/@\[\[?[^\]]+?\]?\]/g, "").replace(/\s+/g, " ").trim();
         return { cleanQuery, noteIds };
     }
 

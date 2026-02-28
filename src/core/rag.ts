@@ -17,17 +17,28 @@ export interface RAGResponse {
 }
 
 /**
- * Deduplicate search results: keep only the highest-scoring chunk per note.
+ * Expand search results to include all chunks for every identified note.
+ * Chunks are grouped by note and ordered by their index.
  */
-function deduplicateByNote(results: SearchResult[]): SearchResult[] {
-    const best = new Map<string, SearchResult>();
+async function expandToFullNotes(database: WoakiDatabase, results: SearchResult[]): Promise<SearchResult[]> {
+    const noteIdOrder: string[] = [];
+    const seenNotes = new Set<string>();
+
     for (const r of results) {
-        const existing = best.get(r.document.noteId);
-        if (!existing || r.score > existing.score) {
-            best.set(r.document.noteId, r);
+        if (!seenNotes.has(r.document.noteId)) {
+            seenNotes.add(r.document.noteId);
+            noteIdOrder.push(r.document.noteId);
         }
     }
-    return Array.from(best.values());
+
+    const expanded: SearchResult[] = [];
+    for (const noteId of noteIdOrder) {
+        const chunks = await database.getChunksByNoteId(noteId);
+        // Ensure chunks are in correct order within the note
+        chunks.sort((a, b) => a.document.chunkIndex - b.document.chunkIndex);
+        expanded.push(...chunks);
+    }
+    return expanded;
 }
 
 /**
@@ -36,16 +47,22 @@ function deduplicateByNote(results: SearchResult[]): SearchResult[] {
 function buildContext(results: SearchResult[]): { context: string; sources: RAGSource[] } {
     const sources: RAGSource[] = [];
     const contextParts: string[] = [];
+    const addedNoteIds = new Set<string>();
 
     for (let i = 0; i < results.length; i++) {
         const r = results[i]!;
-        contextParts.push(`[Source ${i + 1}: ${r.document.title}]\n${r.document.content}`);
-        sources.push({
-            title: r.document.title,
-            filePath: r.document.filePath,
-            score: r.score,
-            excerpt: r.document.content.substring(0, 200) + (r.document.content.length > 200 ? "..." : ""),
-        });
+        contextParts.push(`[Source: ${r.document.title}, Chunk: ${r.document.chunkIndex + 1}]\n${r.document.content}`);
+
+        // Only add each note once to the source list UI
+        if (!addedNoteIds.has(r.document.noteId)) {
+            sources.push({
+                title: r.document.title,
+                filePath: r.document.filePath,
+                score: r.score,
+                excerpt: r.document.content.substring(0, 200) + (r.document.content.length > 200 ? "..." : ""),
+            });
+            addedNoteIds.add(r.document.noteId);
+        }
     }
 
     return {
@@ -86,7 +103,7 @@ export interface RAGOptions {
 }
 
 /**
- * Merge forced-note chunks (at top) with search results, deduplicating by chunk id.
+ * Merge forced-note chunks (at top) with search results, deduplicating by note.
  */
 async function mergeForced(
     database: WoakiDatabase,
@@ -96,6 +113,7 @@ async function mergeForced(
     const forced: SearchResult[] = [];
     for (const noteId of forcedNoteIds) {
         const chunks = await database.getChunksByNoteId(noteId);
+        chunks.sort((a, b) => a.document.chunkIndex - b.document.chunkIndex);
         forced.push(...chunks);
     }
 
@@ -128,11 +146,11 @@ export async function ragQuery(
         results = await mergeForced(database, options.forcedNoteIds, results);
     }
 
-    // 3. Deduplicate
-    const unique = deduplicateByNote(results);
+    // 3. Expand to full notes (instead of just deduplicating)
+    const expanded = await expandToFullNotes(database, results);
 
     // 4. Build context
-    const { context, sources } = buildContext(unique);
+    const { context, sources } = buildContext(expanded);
 
     // 5. Build messages
     const messages = buildMessages(context, query, conversationHistory);
@@ -171,11 +189,11 @@ export async function ragQueryStream(
         results = await mergeForced(database, options.forcedNoteIds, results);
     }
 
-    // 3. Deduplicate
-    const unique = deduplicateByNote(results);
+    // 3. Expand to full notes (instead of just deduplicating)
+    const expanded = await expandToFullNotes(database, results);
 
     // 4. Build context and notify sources
-    const { context, sources } = buildContext(unique);
+    const { context, sources } = buildContext(expanded);
     onSources(sources);
 
     // 5. Build messages

@@ -54,26 +54,29 @@ export class LLMAdapter {
     }
 
     private static buildProvider(settings: WoakiSettings): LLMProvider {
-        switch (settings.llmProvider) {
+        const provider = settings.llmProvider;
+        const config = settings.providers[provider];
+
+        switch (provider) {
             case "ollama":
                 return {
                     name: "Ollama",
-                    baseUrl: settings.llmBaseUrl || "http://localhost:11434",
+                    baseUrl: config.baseUrl || "http://localhost:11434",
                     model: settings.llmModel || "llama3.2",
                 };
             case "anthropic":
                 return {
                     name: "Anthropic",
-                    baseUrl: settings.llmBaseUrl || "https://api.anthropic.com",
-                    apiKey: settings.llmApiKey,
+                    baseUrl: config.baseUrl || "https://api.anthropic.com",
+                    apiKey: config.apiKey,
                     model: settings.llmModel || "claude-sonnet-4-5-20250929",
                 };
             case "openai":
             default:
                 return {
                     name: "OpenAI",
-                    baseUrl: settings.llmBaseUrl || "https://api.openai.com",
-                    apiKey: settings.llmApiKey,
+                    baseUrl: config.baseUrl || "https://api.openai.com",
+                    apiKey: config.apiKey,
                     model: settings.llmModel || "gpt-4o-mini",
                 };
         }

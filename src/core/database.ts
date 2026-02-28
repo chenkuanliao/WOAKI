@@ -264,26 +264,20 @@ export class WoakiDatabase {
 		return ids;
 	}
 
-	private async searchByField(field: string, value: string): Promise<Array<{ id: string; document: ChunkDocument }>> {
+	private async searchByField(field: string, value: string): Promise<SearchResult[]> {
 		if (!this.db) return [];
 
-		try {
-			// Orama's `where` clause doesn't support `string`-type fields
-			// (only `enum`/`number`). Fetch all docs and filter in JS.
-			const results = await search(this.db, {
-				term: "",
-				limit: 100000,
-			}) as Results<ChunkDocument>;
+		const results = await search(this.db, {
+			where: {
+				[field]: value
+			},
+			limit: 1000,
+		}) as Results<ChunkDocument>;
 
-			return results.hits
-				.filter(hit => (hit.document as unknown as Record<string, unknown>)[field] === value)
-				.map(hit => ({
-					id: hit.id,
-					document: hit.document,
-				}));
-		} catch (e) {
-			console.warn(`WOAKI: searchByField("${field}", "${value}") failed:`, e);
-			return [];
-		}
+		return results.hits.map(hit => ({
+			id: hit.id,
+			score: hit.score,
+			document: hit.document,
+		}));
 	}
 }
