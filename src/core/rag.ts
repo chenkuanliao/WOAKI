@@ -51,7 +51,7 @@ function buildContext(results: SearchResult[]): { context: string; sources: RAGS
 
     for (let i = 0; i < results.length; i++) {
         const r = results[i]!;
-        contextParts.push(`[Source: ${r.document.title}, Chunk: ${r.document.chunkIndex + 1}]\n${r.document.content}`);
+        contextParts.push(`【Source: ${r.document.title}, Chunk: ${r.document.chunkIndex + 1}】\n${r.document.content}`);
 
         // Only add each note once to the source list UI
         if (!addedNoteIds.has(r.document.noteId)) {

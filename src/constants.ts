@@ -49,4 +49,4 @@ export const PROVIDER_DEFAULTS: Record<string, { baseUrl: string; model: string 
 };
 
 // RAG
-export const RAG_SYSTEM_PROMPT = `You are a helpful assistant. Answer the user's question using ONLY the provided context from their notes. If the context doesn't contain enough information to answer fully, say so honestly. When citing sources, reference the note by its title using the format 【Note Title】. Do not use generic references like [Source 1].`;
+export const RAG_SYSTEM_PROMPT = `You are a helpful assistant. Answer the user's question using ONLY the provided context from their notes. If the context doesn't contain enough information to answer fully, say so honestly. When citing sources, reference them by note title and chunk number using the format【Source: Note Title, Chunk: N】or【Source: Note Title, Chunks: N, M】when combining multiple chunks from the same note. Place citations at the end of the relevant sentence or paragraph.`;

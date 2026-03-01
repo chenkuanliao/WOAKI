@@ -113,7 +113,7 @@ export class WoakiChatView extends ItemView {
             cls: "woaki-chat-action-btn clickable-icon",
             attr: { "aria-label": "New conversation" },
         });
-        clearBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>`;
+        clearBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`;
         clearBtn.addEventListener("click", () => this.newConversation());
     }
 
@@ -615,8 +615,8 @@ export class WoakiChatView extends ItemView {
         if (!bubbleEl) return;
 
         const sourcesEl = (bubbleEl as HTMLElement).createDiv("woaki-sources");
-        const labelText = model ? `Sources (${model})` : "Sources";
-        sourcesEl.createEl("span", { text: labelText, cls: "woaki-sources-label" });
+        const labelText = model ? `References (${model})` : "References";
+        sourcesEl.createDiv({ text: labelText, cls: "woaki-sources-label" });
 
         const sourceList = sourcesEl.createDiv("woaki-sources-list");
         for (const source of sources) {
@@ -631,10 +631,12 @@ export class WoakiChatView extends ItemView {
                 this.app.workspace.openLinkText(source.filePath, "");
             });
 
-            sourceEl.createEl("span", {
-                text: ` ${Math.round(source.score * 100)}%`,
-                cls: "woaki-source-score",
-            });
+            if (source.score > 0) {
+                sourceEl.createEl("span", {
+                    text: `${Math.round(source.score * 100)}%`,
+                    cls: "woaki-source-score",
+                });
+            }
         }
     }
 

@@ -13,9 +13,10 @@
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	padding: var(--size-4-2) var(--size-4-3);
+	padding: var(--size-4-2) var(--size-4-4);
 	border-bottom: 1px solid var(--background-modifier-border);
 	flex-shrink: 0;
+	background: var(--background-primary);
 }
 
 .woaki-chat-title {
@@ -194,6 +195,14 @@
 	animation: woaki-fade-in 0.2s ease-out;
 }
 
+.woaki-message-user {
+	align-items: flex-end;
+}
+
+.woaki-message-assistant {
+	align-items: flex-start;
+}
+
 @keyframes woaki-fade-in {
 	from {
 		opacity: 0;
@@ -209,9 +218,10 @@
 .woaki-message-bubble {
 	border-radius: var(--radius-m);
 	padding: var(--size-4-2) var(--size-4-3);
-	max-width: 100%;
+	max-width: 85%;
 	word-wrap: break-word;
 	overflow-wrap: break-word;
+	overflow: hidden;
 }
 
 /* User messages */
@@ -295,21 +305,32 @@
 
 /* Assistant messages */
 .woaki-message-assistant .woaki-message-bubble {
-	background: var(--background-secondary);
-	border: 1px solid var(--background-modifier-border);
+	background: var(--background-secondary-alt);
+	border: 1px solid var(--background-modifier-border-focus);
 	align-self: flex-start;
 	border-bottom-left-radius: var(--radius-xs);
 	position: relative;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+	background-image: linear-gradient(to bottom right, var(--background-secondary-alt), var(--background-secondary));
+}
+
+.theme-dark .woaki-message-assistant .woaki-message-bubble {
+	background: rgba(255, 255, 255, 0.03);
+	backdrop-filter: blur(10px);
+	-webkit-backdrop-filter: blur(10px);
 }
 
 .woaki-message-assistant .woaki-message-content {
 	color: var(--text-normal);
-	line-height: 1.5;
+	line-height: 1.6;
 	user-select: text;
 	-webkit-user-select: text;
+	font-size: var(--font-ui-medium);
 }
 
-
+.woaki-message-assistant .woaki-message-content p {
+	margin: 0.8em 0;
+}
 
 .woaki-message-assistant .woaki-message-content p:first-child {
 	margin-top: 0;
@@ -317,6 +338,16 @@
 
 .woaki-message-assistant .woaki-message-content p:last-child {
 	margin-bottom: 0;
+}
+
+.woaki-message-assistant .woaki-message-content ol,
+.woaki-message-assistant .woaki-message-content ul {
+	padding-left: 1.5em;
+	margin: 0.5em 0;
+}
+
+.woaki-message-assistant .woaki-message-content li {
+	margin: 0.3em 0;
 }
 
 /* Copy button */
@@ -398,49 +429,63 @@
 
 /* Source citations */
 .woaki-sources {
-	margin-top: var(--size-4-2);
+	margin-top: var(--size-4-3);
 	padding-top: var(--size-4-2);
 	border-top: 1px solid var(--background-modifier-border);
 }
 
 .woaki-sources-label {
-	font-size: var(--font-ui-smaller);
-	color: var(--text-muted);
-	font-weight: var(--font-semibold);
+	font-size: 10px;
+	color: var(--text-faint);
+	font-weight: var(--font-bold);
 	text-transform: uppercase;
-	letter-spacing: 0.05em;
+	letter-spacing: 0.1em;
+	margin-bottom: var(--size-4-1);
 }
 
 .woaki-sources-list {
 	display: flex;
 	flex-wrap: wrap;
-	gap: var(--size-4-1);
-	margin-top: var(--size-4-1);
+	gap: 6px;
 }
 
 .woaki-source-item {
 	display: inline-flex;
 	align-items: center;
-	gap: 2px;
-	font-size: var(--font-ui-smaller);
+	gap: 4px;
+	font-size: 11px;
 	background: var(--background-modifier-hover);
 	padding: 2px 8px;
-	border-radius: var(--radius-s);
+	border-radius: var(--radius-m);
+	border: 1px solid var(--background-modifier-border);
+	transition: all 0.15s ease;
+}
+
+.woaki-source-item:hover {
+	border-color: var(--interactive-accent);
+	background: var(--background-modifier-border-focus);
 }
 
 .woaki-source-link {
-	color: var(--text-accent);
+	color: var(--text-muted);
 	cursor: pointer;
 	text-decoration: none;
+	max-width: 150px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
 }
 
-.woaki-source-link:hover {
-	text-decoration: underline;
+.woaki-source-item:hover .woaki-source-link {
+	color: var(--text-normal);
 }
 
 .woaki-source-score {
 	color: var(--text-faint);
-	font-size: var(--font-ui-smaller);
+	font-size: 9px;
+	background: var(--background-primary);
+	padding: 0 4px;
+	border-radius: 4px;
 }
 
 /* Input area */
