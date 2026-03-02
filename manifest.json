@@ -3,7 +3,7 @@
 	"name": "WOAKI",
 	"version": "0.1.0",
 	"minAppVersion": "1.0.0",
-	"description": "Write Once And Know It. Your second brain — AI-powered memory and chat for your notes.",
+	"description": "Write Once And Know It. An AI-powered memory and chat for your notes.",
 	"author": "Chen-Kuan Liao",
 	"authorUrl": "https://github.com/chenkuanliao",
 	"isDesktopOnly": true
