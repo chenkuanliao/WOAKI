@@ -20,3 +20,10 @@ data.json
 
 # Exclude macOS Finder (System Explorer) View States
 .DS_Store
+
+# Build artifacts (WASM files copied from node_modules by esbuild, CDN fallback exists)
+*.wasm
+
+# User data
+orama-db.json
+conversations/

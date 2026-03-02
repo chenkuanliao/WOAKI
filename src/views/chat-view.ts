@@ -1,4 +1,4 @@
-import { ItemView, MarkdownRenderer, WorkspaceLeaf } from "obsidian";
+import { ItemView, MarkdownRenderer, setIcon, WorkspaceLeaf } from "obsidian";
 import { CHAT_VIEW_TYPE, PLUGIN_DISPLAY_NAME } from "../constants";
 import type WoakiPlugin from "../main";
 import type { ChatMessage } from "../core/llm-adapter";
@@ -96,7 +96,7 @@ export class WoakiChatView extends ItemView {
 
         modelBadge.addEventListener("click", (e) => {
             e.stopPropagation();
-            this.toggleModelDropdown(modelSelector);
+            void this.toggleModelDropdown(modelSelector);
         });
 
         const actions = header.createDiv("woaki-chat-actions");
@@ -106,15 +106,15 @@ export class WoakiChatView extends ItemView {
             cls: "woaki-chat-action-btn clickable-icon",
             attr: { "aria-label": "Conversation history" },
         });
-        historyBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/></svg>`;
-        historyBtn.addEventListener("click", () => this.toggleConversationList());
+        setIcon(historyBtn, "history");
+        historyBtn.addEventListener("click", () => void this.toggleConversationList());
 
         const clearBtn = actions.createEl("button", {
             cls: "woaki-chat-action-btn clickable-icon",
             attr: { "aria-label": "New conversation" },
         });
-        clearBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`;
-        clearBtn.addEventListener("click", () => this.newConversation());
+        setIcon(clearBtn, "plus");
+        clearBtn.addEventListener("click", () => void this.newConversation());
     }
 
     private buildInputArea(container: HTMLElement): void {
@@ -134,12 +134,11 @@ export class WoakiChatView extends ItemView {
             cls: "woaki-send-btn clickable-icon",
             attr: { "aria-label": "Send message" },
         });
-        this.sendBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>`;
-
-        console.debug("[WOAKI] Chat input area built, autocomplete listeners attached");
+        setIcon(this.sendBtn, "send");
 
         // Auto-resize textarea and handle autocomplete
         this.inputEl.addEventListener("input", () => {
+            // eslint-disable-next-line obsidianmd/no-static-styles-assignment -- dynamic height for auto-resize
             this.inputEl.style.height = "auto";
             this.inputEl.style.height = Math.min(this.inputEl.scrollHeight, 150) + "px";
             this.handleAutocomplete();
@@ -171,11 +170,11 @@ export class WoakiChatView extends ItemView {
 
             if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
-                this.handleSend();
+                void this.handleSend();
             }
         });
 
-        this.sendBtn.addEventListener("click", () => this.handleSend());
+        this.sendBtn.addEventListener("click", () => void this.handleSend());
     }
 
     private handleAutocomplete(): void {
@@ -185,7 +184,6 @@ export class WoakiChatView extends ItemView {
 
         // Check if we're right after @ with optional word chars (no space after @)
         const atMatch = beforeCursor.match(/@(\w*)$/);
-        console.debug("[WOAKI autocomplete] beforeCursor:", JSON.stringify(beforeCursor), "atMatch:", atMatch);
         if (!atMatch) {
             this.dismissAutocomplete();
             return;
@@ -194,18 +192,15 @@ export class WoakiChatView extends ItemView {
         const partial = atMatch[1]!.toLowerCase();
         const allFiles = this.app.vault.getMarkdownFiles();
         const memorizedFiles = allFiles.filter(f => isNoteMemorized(this.app, f));
-        console.debug("[WOAKI autocomplete] allFiles:", allFiles.length, "memorized:", memorizedFiles.length, "partial:", JSON.stringify(partial));
         const files = memorizedFiles
             .filter(f => f.basename.toLowerCase().includes(partial))
             .slice(0, 8);
 
         if (files.length === 0) {
-            console.debug("[WOAKI autocomplete] No matching files, dismissing");
             this.dismissAutocomplete();
             return;
         }
 
-        console.debug("[WOAKI autocomplete] Showing", files.length, "results:", files.map(f => f.basename));
         this.autocompleteItems = files.map(f => f.basename);
         this.autocompleteIndex = 0;
         this.renderAutocomplete();
@@ -214,7 +209,8 @@ export class WoakiChatView extends ItemView {
     private renderAutocomplete(): void {
         this.dismissAutocomplete();
 
-        this.autocompleteEl = createDiv("woaki-autocomplete-dropdown");
+        this.autocompleteEl = document.createElement("div");
+        this.autocompleteEl.addClass("woaki-autocomplete-dropdown");
         for (let i = 0; i < this.autocompleteItems.length; i++) {
             const item = this.autocompleteEl.createDiv({
                 cls: "woaki-autocomplete-item" + (i === this.autocompleteIndex ? " is-selected" : ""),
@@ -301,6 +297,7 @@ export class WoakiChatView extends ItemView {
         if (!query || this.isGenerating) return;
 
         this.inputEl.value = "";
+        // eslint-disable-next-line obsidianmd/no-static-styles-assignment -- reset dynamic height
         this.inputEl.style.height = "auto";
 
         await this.processMessage(query);
@@ -376,7 +373,9 @@ export class WoakiChatView extends ItemView {
         const assistantEl = this.createAssistantMessage(assistantMsgId);
         const contentEl = assistantEl.querySelector(".woaki-message-content") as HTMLElement;
         const thinkingEl = contentEl.createDiv("woaki-thinking");
-        thinkingEl.innerHTML = `<span></span><span></span><span></span>`;
+        thinkingEl.createSpan();
+        thinkingEl.createSpan();
+        thinkingEl.createSpan();
 
         let fullResponse = "";
         let sources: RAGSource[] = [];
@@ -405,7 +404,7 @@ export class WoakiChatView extends ItemView {
                     }
                     fullResponse += chunk;
                     contentEl.empty();
-                    MarkdownRenderer.render(this.app, fullResponse, contentEl, "", this);
+                    void MarkdownRenderer.render(this.app, fullResponse, contentEl, "", this);
                     this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
                 },
                 () => {
@@ -428,7 +427,7 @@ export class WoakiChatView extends ItemView {
                     this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
 
                     // Auto-save conversation
-                    this.saveCurrentConversation();
+                    void this.saveCurrentConversation();
                 },
                 this.abortController.signal,
                 ragOptions,
@@ -463,18 +462,18 @@ export class WoakiChatView extends ItemView {
                     });
                     retryBtn.addEventListener("click", () => {
                         assistantEl.remove();
-                        this.generateResponse(query);
+                        void this.generateResponse(query);
                     });
                 }
 
                 if (isWoakiError && !e.retryable && errorMsg.includes("API key")) {
                     const settingsBtn = errorActions.createEl("button", {
-                        text: "Check Settings",
+                        text: "Check settings",
                         cls: "woaki-error-btn",
                     });
                     settingsBtn.addEventListener("click", () => {
                         // Open settings tab
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
                         (this.app as any).setting?.open?.();
                     });
                 }
@@ -494,7 +493,7 @@ export class WoakiChatView extends ItemView {
                 const name = refMatch[1]!;
                 const pill = contentEl.createEl("span", { text: name, cls: "woaki-note-ref" });
                 pill.addEventListener("click", () => {
-                    this.app.workspace.openLinkText(name, "");
+                    void this.app.workspace.openLinkText(name, "");
                 });
             } else if (part) {
                 contentEl.appendText(part);
@@ -514,7 +513,7 @@ export class WoakiChatView extends ItemView {
             cls: "woaki-message-edit-btn clickable-icon",
             attr: { "aria-label": "Edit message" },
         });
-        editBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>`;
+        setIcon(editBtn, "pencil");
         editBtn.addEventListener("click", () => this.startEditing(id, contentEl, bubbleEl));
 
         this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
@@ -527,6 +526,7 @@ export class WoakiChatView extends ItemView {
         const message = this.conversationHistory.find(m => m.id === id);
         const originalText = message ? message.content : contentEl.innerText;
 
+        // eslint-disable-next-line obsidianmd/no-static-styles-assignment -- toggle inline editor visibility
         contentEl.style.display = "none";
         bubbleEl.querySelector(".woaki-message-edit-btn")?.addClass("is-hidden");
 
@@ -539,11 +539,12 @@ export class WoakiChatView extends ItemView {
         textarea.setSelectionRange(originalText.length, originalText.length);
 
         const actions = editorWrapper.createDiv("woaki-edit-actions");
-        const saveBtn = actions.createEl("button", { text: "Save & Resend", cls: "mod-cta" });
+        const saveBtn = actions.createEl("button", { text: "Save & resend", cls: "mod-cta" });
         const cancelBtn = actions.createEl("button", { text: "Cancel" });
 
         const cleanup = () => {
             editorWrapper.remove();
+            // eslint-disable-next-line obsidianmd/no-static-styles-assignment -- toggle inline editor visibility
             contentEl.style.display = "block";
             bubbleEl.querySelector(".woaki-message-edit-btn")?.removeClass("is-hidden");
         };
@@ -581,7 +582,7 @@ export class WoakiChatView extends ItemView {
         this.conversationHistory = this.conversationHistory.slice(0, index);
 
         // 3. Process as a new message
-        this.processMessage(newText);
+        void this.processMessage(newText);
     }
 
     private createAssistantMessage(id: string): HTMLElement {
@@ -595,14 +596,14 @@ export class WoakiChatView extends ItemView {
             cls: "woaki-copy-btn clickable-icon",
             attr: { "aria-label": "Copy response" },
         });
-        copyBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
+        setIcon(copyBtn, "copy");
         copyBtn.addEventListener("click", () => {
             const contentEl = bubbleEl.querySelector(".woaki-message-content") as HTMLElement;
             if (contentEl) {
-                navigator.clipboard.writeText(contentEl.innerText);
-                copyBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+                void navigator.clipboard.writeText(contentEl.innerText);
+                setIcon(copyBtn, "check");
                 setTimeout(() => {
-                    copyBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
+                    setIcon(copyBtn, "copy");
                 }, 1500);
             }
         });
@@ -628,7 +629,7 @@ export class WoakiChatView extends ItemView {
             });
             link.addEventListener("click", (e) => {
                 e.preventDefault();
-                this.app.workspace.openLinkText(source.filePath, "");
+                void this.app.workspace.openLinkText(source.filePath, "");
             });
 
             if (source.score > 0) {
@@ -693,7 +694,7 @@ export class WoakiChatView extends ItemView {
             } else {
                 const el = this.createAssistantMessage(msg.id);
                 const contentEl = el.querySelector(".woaki-message-content") as HTMLElement;
-                MarkdownRenderer.render(this.app, msg.content, contentEl, "", this);
+                void MarkdownRenderer.render(this.app, msg.content, contentEl, "", this);
 
                 // Restore sources if stored
                 const restoredSources: RAGSource[] | undefined = msg.sources?.map(s => ({
@@ -737,46 +738,49 @@ export class WoakiChatView extends ItemView {
                 cls: "woaki-conversation-date",
             });
 
-            info.addEventListener("click", async () => {
-                await this.saveCurrentConversation();
-                await this.loadConversation(conv.id);
-                this.conversationListEl?.remove();
-                this.conversationListEl = null;
+            info.addEventListener("click", () => {
+                void this.saveCurrentConversation().then(() =>
+                    this.loadConversation(conv.id)
+                ).then(() => {
+                    this.conversationListEl?.remove();
+                    this.conversationListEl = null;
+                });
             });
 
             const deleteBtn = item.createEl("button", {
                 cls: "woaki-conversation-delete clickable-icon",
                 attr: { "aria-label": "Delete conversation" },
             });
-            deleteBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
-            deleteBtn.addEventListener("click", async (e) => {
+            setIcon(deleteBtn, "x");
+            deleteBtn.addEventListener("click", (e) => {
                 e.stopPropagation();
-                await this.plugin.conversationStore.delete(conv.id);
-                if (conv.id === this.currentConversationId) {
-                    this.currentConversationId = null;
-                    this.conversationHistory = [];
-                    this.messagesEl.empty();
-                    this.showEmptyState();
-                }
-                item.remove();
-                // Remove list if empty
-                if (this.conversationListEl && this.conversationListEl.querySelectorAll(".woaki-conversation-item").length === 0) {
-                    this.conversationListEl.remove();
-                    this.conversationListEl = null;
-                }
+                void this.plugin.conversationStore.delete(conv.id).then(() => {
+                    if (conv.id === this.currentConversationId) {
+                        this.currentConversationId = null;
+                        this.conversationHistory = [];
+                        this.messagesEl.empty();
+                        this.showEmptyState();
+                    }
+                    item.remove();
+                    // Remove list if empty
+                    if (this.conversationListEl && this.conversationListEl.querySelectorAll(".woaki-conversation-item").length === 0) {
+                        this.conversationListEl.remove();
+                        this.conversationListEl = null;
+                    }
+                });
             });
         }
     }
 
     private updateSendButton(): void {
         if (this.isGenerating) {
-            this.sendBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>`;
+            setIcon(this.sendBtn, "square");
             this.sendBtn.setAttribute("aria-label", "Stop generating");
             this.sendBtn.onclick = () => {
                 this.abortController?.abort();
             };
         } else {
-            this.sendBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>`;
+            setIcon(this.sendBtn, "send");
             this.sendBtn.setAttribute("aria-label", "Send message");
             this.sendBtn.onclick = () => this.handleSend();
         }

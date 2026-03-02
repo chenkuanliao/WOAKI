@@ -14,18 +14,19 @@ export function generateWoakiId(): string {
 
 export function isNoteMemorized(app: App, file: TFile): boolean {
 	const cache = app.metadataCache.getFileCache(file);
-	const value = cache?.frontmatter?.[WOAKI_PROPERTY];
-	return value === WOAKI_MEMORIZED_VALUE;
+	const fm = cache?.frontmatter as Record<string, unknown> | undefined;
+	return fm?.[WOAKI_PROPERTY] === WOAKI_MEMORIZED_VALUE;
 }
 
 export function getWoakiId(app: App, file: TFile): string | undefined {
 	const cache = app.metadataCache.getFileCache(file);
-	return cache?.frontmatter?.[WOAKI_ID_PROPERTY] as string | undefined;
+	const fm = cache?.frontmatter as Record<string, unknown> | undefined;
+	return fm?.[WOAKI_ID_PROPERTY] as string | undefined;
 }
 
 export async function addWoakiFrontmatter(app: App, file: TFile): Promise<string> {
 	const id = generateWoakiId();
-	await app.fileManager.processFrontMatter(file, (frontmatter) => {
+	await app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
 		frontmatter[WOAKI_PROPERTY] = WOAKI_MEMORIZED_VALUE;
 		frontmatter[WOAKI_ID_PROPERTY] = id;
 	});
@@ -33,7 +34,7 @@ export async function addWoakiFrontmatter(app: App, file: TFile): Promise<string
 }
 
 export async function removeWoakiFrontmatter(app: App, file: TFile): Promise<void> {
-	await app.fileManager.processFrontMatter(file, (frontmatter) => {
+	await app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
 		delete frontmatter[WOAKI_PROPERTY];
 		delete frontmatter[WOAKI_ID_PROPERTY];
 	});

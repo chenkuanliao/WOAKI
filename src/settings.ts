@@ -77,35 +77,36 @@ export class WoakiSettingTab extends PluginSettingTab {
 		this.plugin = plugin;
 	}
 
-	async display(): Promise<void> {
+	display(): void {
 		const { containerEl } = this;
 		containerEl.empty();
 
 		// --- LLM Providers ---
-		containerEl.createEl("h2", { text: "LLM Providers" });
+		// eslint-disable-next-line obsidianmd/ui/sentence-case -- LLM is a standard acronym
+		new Setting(containerEl).setName("LLM providers").setHeading();
 		containerEl.createEl("p", {
 			text: "Configure one or more providers. Star (★) the models you want available in chat.",
 			cls: "setting-item-description",
 		});
 
-		await this.renderProvider(containerEl, "openai", "OpenAI", {
+		void this.renderProvider(containerEl, "openai", "OpenAI", {
 			keyPlaceholder: "sk-...",
 			baseUrlDefault: "https://api.openai.com",
 		});
 
-		await this.renderProvider(containerEl, "anthropic", "Anthropic", {
+		void this.renderProvider(containerEl, "anthropic", "Anthropic", {
 			keyPlaceholder: "sk-ant-...",
 			baseUrlDefault: "https://api.anthropic.com",
 		});
 
-		await this.renderProvider(containerEl, "ollama", "Ollama (Local)", {
+		void this.renderProvider(containerEl, "ollama", "Ollama (Local)", {
 			keyPlaceholder: "",
 			baseUrlDefault: "http://localhost:11434",
 			noApiKey: true,
 		});
 
 		// --- Embedding ---
-		containerEl.createEl("h2", { text: "Embedding" });
+		new Setting(containerEl).setName("Embedding").setHeading();
 
 		new Setting(containerEl)
 			.setName("Embedding model")
@@ -126,7 +127,7 @@ export class WoakiSettingTab extends PluginSettingTab {
 			});
 
 		// --- RAG ---
-		containerEl.createEl("h2", { text: "RAG Settings" });
+		new Setting(containerEl).setName("Retrieval").setHeading();
 
 		new Setting(containerEl)
 			.setName("Chunk size")
@@ -157,7 +158,7 @@ export class WoakiSettingTab extends PluginSettingTab {
 				}));
 
 		new Setting(containerEl)
-			.setName("Top K results")
+			.setName("Top-k results")
 			.setDesc("Number of top matching chunks to retrieve for context.")
 			.addText(text => text
 				.setPlaceholder("5")
@@ -171,20 +172,21 @@ export class WoakiSettingTab extends PluginSettingTab {
 				}));
 
 		// --- Status ---
-		containerEl.createEl("h2", { text: "About" });
+		new Setting(containerEl).setName("About").setHeading();
 
 		const memorizedCount = this.plugin.statusBar.getMemorizedCount();
 		const chunkCount = this.plugin.database.getDocumentCount();
-		const dbSizeBytes = await this.plugin.database.getDbFileSize();
-		const dbSize = this.formatBytes(dbSizeBytes);
+
+		void this.plugin.database.getDbFileSize().then(dbSizeBytes => {
+			const dbSize = this.formatBytes(dbSizeBytes);
+			new Setting(containerEl)
+				.setName("Database size")
+				.setDesc(`${dbSize} on disk (${this.plugin.manifest.dir}/orama-db.json).`);
+		});
 
 		new Setting(containerEl)
 			.setName("Memorized notes")
 			.setDesc(`${memorizedCount} note${memorizedCount === 1 ? "" : "s"} currently memorized (${chunkCount} chunk${chunkCount === 1 ? "" : "s"} in database).`);
-
-		new Setting(containerEl)
-			.setName("Database size")
-			.setDesc(`${dbSize} on disk (${this.plugin.manifest.dir}/orama-db.json).`);
 	}
 
 	/** Render a provider section with API key, base URL, test connection, and model list */
@@ -208,7 +210,7 @@ export class WoakiSettingTab extends PluginSettingTab {
 		const statusDot = header.createSpan("woaki-provider-status");
 		statusDot.addClass(config.enabled ? "is-connected" : "is-disconnected");
 
-		header.createEl("h3", { text: label });
+		header.createEl("span", { text: label, cls: "woaki-provider-label" });
 
 		// Collapsible body
 		const body = section.createDiv("woaki-provider-body");
@@ -228,7 +230,7 @@ export class WoakiSettingTab extends PluginSettingTab {
 		// API Key (skip for Ollama)
 		if (!opts.noApiKey) {
 			new Setting(body)
-				.setName("API Key")
+				.setName("API key")
 				.addText(text => {
 					text.inputEl.type = "password";
 					text.setPlaceholder(opts.keyPlaceholder)
@@ -258,14 +260,14 @@ export class WoakiSettingTab extends PluginSettingTab {
 			.setName("Connection");
 
 		if (config.enabled) {
-			testSetting.setDesc("✅ Connected");
+			testSetting.setDesc("✅ connected");
 		}
 
 		testSetting.addButton(btn => btn
-			.setButtonText(config.enabled ? "Refresh Models" : "Test Connection")
+			.setButtonText(config.enabled ? "Refresh models" : "Test connection")
 			.setCta()
 			.onClick(async () => {
-				btn.setButtonText("Testing...");
+				btn.setButtonText("Testing…");
 				btn.setDisabled(true);
 				testSetting.setDesc("Testing connection...");
 
@@ -279,29 +281,29 @@ export class WoakiSettingTab extends PluginSettingTab {
 					);
 
 					if (result.ok) {
-						testSetting.setDesc("✅ Connected");
+						testSetting.setDesc("✅ connected");
 						this.plugin.settings.providers[key].enabled = true;
 						await this.plugin.saveSettings();
 
 						// Fetch models
-						btn.setButtonText("Loading models...");
+						btn.setButtonText("Loading models…");
 						const models = await this.plugin.llmAdapter.listModelsForProvider(
 							providerName,
 							config.apiKey,
 							config.baseUrl,
 						);
 						this.renderModelList(modelListEl, key, models);
-						btn.setButtonText("Refresh Models");
+						btn.setButtonText("Refresh models");
 					} else {
 						testSetting.setDesc(`❌ ${result.error ?? "Connection failed"}`);
 						this.plugin.settings.providers[key].enabled = false;
 						await this.plugin.saveSettings();
-						btn.setButtonText("Test Connection");
+						btn.setButtonText("Test connection");
 					}
 				} catch (e: unknown) {
 					const msg = e instanceof Error ? e.message : String(e);
 					testSetting.setDesc(`❌ ${msg}`);
-					btn.setButtonText("Test Connection");
+					btn.setButtonText("Test connection");
 				} finally {
 					btn.setDisabled(false);
 				}
@@ -356,7 +358,7 @@ export class WoakiSettingTab extends PluginSettingTab {
 
 			row.createSpan({ text: model, cls: "woaki-model-name" });
 
-			starBtn.addEventListener("click", async () => {
+			starBtn.addEventListener("click", () => {
 				const idx = this.plugin.settings.starredModels.findIndex(
 					s => s.provider === provider && s.model === model,
 				);
@@ -369,7 +371,7 @@ export class WoakiSettingTab extends PluginSettingTab {
 					starBtn.textContent = "★";
 					starBtn.addClass("is-starred");
 				}
-				await this.plugin.saveSettings();
+				void this.plugin.saveSettings();
 			});
 		}
 	}

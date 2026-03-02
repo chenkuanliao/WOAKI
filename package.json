@@ -20,6 +20,14 @@
 	],
 	"author": "Brian Liao",
 	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/chenkuanliao/WOAKI.git"
+	},
+	"homepage": "https://github.com/chenkuanliao/WOAKI#readme",
+	"bugs": {
+		"url": "https://github.com/chenkuanliao/WOAKI/issues"
+	},
 	"devDependencies": {
 		"@eslint/js": "9.30.1",
 		"@types/node": "^16.11.6",
@@ -27,6 +35,7 @@
 		"eslint-plugin-obsidianmd": "0.1.9",
 		"globals": "14.0.0",
 		"jiti": "2.6.1",
+		"obsidian": "latest",
 		"tslib": "2.4.0",
 		"typescript": "^5.8.3",
 		"typescript-eslint": "8.35.1"
@@ -34,7 +43,6 @@
 	"dependencies": {
 		"@huggingface/transformers": "^3.8.1",
 		"@orama/orama": "^3.1.18",
-		"@orama/plugin-data-persistence": "^3.1.18",
-		"obsidian": "latest"
+		"@orama/plugin-data-persistence": "^3.1.18"
 	}
 }

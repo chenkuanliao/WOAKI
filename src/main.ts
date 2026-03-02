@@ -58,34 +58,32 @@ export default class WoakiPlugin extends Plugin {
 		this.registerFileEvents();
 		this.registerMetadataCacheEvents();
 
-		this.addRibbonIcon(ICON_BRAIN, `${PLUGIN_DISPLAY_NAME}: Memorize current note`, async () => {
+		this.addRibbonIcon(ICON_BRAIN, `${PLUGIN_DISPLAY_NAME}: Memorize current note`, () => {
 			const file = this.app.workspace.getActiveFile();
 			if (file) {
-				await this.memoryManager.memorizeNote(file);
+				void this.memoryManager.memorizeNote(file);
 			}
 		});
 
-		this.addRibbonIcon("message-circle", `${PLUGIN_DISPLAY_NAME}: Open Chat`, () => {
-			this.activateChatView();
+		this.addRibbonIcon("message-circle", `${PLUGIN_DISPLAY_NAME}: Open chat`, () => {
+			void this.activateChatView();
 		});
 
-		this.addRibbonIcon(ICON_DASHBOARD, `${PLUGIN_DISPLAY_NAME}: Memory Status`, () => {
-			this.activateMemoryStatusView();
+		this.addRibbonIcon(ICON_DASHBOARD, `${PLUGIN_DISPLAY_NAME}: Memory status`, () => {
+			void this.activateMemoryStatusView();
 		});
 
 		this.addSettingTab(new WoakiSettingTab(this.app, this));
 
 		this.app.workspace.onLayoutReady(() => {
 			this.statusBar.update();
-			this.memoryManager.syncOnStartup();
+			void this.memoryManager.syncOnStartup();
 		});
 	}
 
-	async onunload() {
-		await this.database.persist();
+	onunload() {
+		void this.database.persist();
 		this.embeddingModel.dispose();
-		this.app.workspace.detachLeavesOfType(CHAT_VIEW_TYPE);
-		this.app.workspace.detachLeavesOfType(MEMORY_STATUS_VIEW_TYPE);
 	}
 
 	private registerCommands(): void {
@@ -96,7 +94,7 @@ export default class WoakiPlugin extends Plugin {
 				const file = this.app.workspace.getActiveViewOfType(MarkdownView)?.file;
 				if (file) {
 					if (!checking) {
-						this.memoryManager.memorizeNote(file);
+						void this.memoryManager.memorizeNote(file);
 					}
 					return true;
 				}
@@ -111,7 +109,7 @@ export default class WoakiPlugin extends Plugin {
 				const file = this.app.workspace.getActiveViewOfType(MarkdownView)?.file;
 				if (file && isNoteMemorized(this.app, file)) {
 					if (!checking) {
-						this.memoryManager.unmemorizeNote(file);
+						void this.memoryManager.unmemorizeNote(file);
 					}
 					return true;
 				}
@@ -121,9 +119,9 @@ export default class WoakiPlugin extends Plugin {
 
 		this.addCommand({
 			id: CMD_OPEN_CHAT,
-			name: "Open WOAKI Chat",
+			name: "Open chat",
 			callback: () => {
-				this.activateChatView();
+				void this.activateChatView();
 			},
 		});
 
@@ -134,7 +132,7 @@ export default class WoakiPlugin extends Plugin {
 				const file = this.app.workspace.getActiveFile();
 				if (file?.parent) {
 					if (!checking) {
-						this.memoryManager.memorizeFolder(file.parent.path);
+						void this.memoryManager.memorizeFolder(file.parent.path);
 					}
 					return true;
 				}
@@ -146,7 +144,7 @@ export default class WoakiPlugin extends Plugin {
 			id: CMD_OPEN_MEMORY_STATUS,
 			name: "Open memory status panel",
 			callback: () => {
-				this.activateMemoryStatusView();
+				void this.activateMemoryStatusView();
 			},
 		});
 
@@ -212,7 +210,7 @@ export default class WoakiPlugin extends Plugin {
 			this.app.metadataCache.on("changed", (file) => {
 				this.statusBar.update();
 				if (file instanceof TFile) {
-					this.memoryManager.handleFileChange(file);
+					void this.memoryManager.handleFileChange(file);
 				}
 			})
 		);
@@ -221,13 +219,13 @@ export default class WoakiPlugin extends Plugin {
 	private registerFileEvents(): void {
 		this.registerEvent(
 			this.app.vault.on("delete", (file) => {
-				this.memoryManager.handleFileDelete(file);
+				void this.memoryManager.handleFileDelete(file);
 			})
 		);
 
 		this.registerEvent(
 			this.app.vault.on("rename", (file, oldPath) => {
-				this.memoryManager.handleFileRename(file, oldPath);
+				void this.memoryManager.handleFileRename(file, oldPath);
 			})
 		);
 	}
@@ -277,28 +275,28 @@ export default class WoakiPlugin extends Plugin {
 	async activateChatView(): Promise<void> {
 		const existing = this.app.workspace.getLeavesOfType(CHAT_VIEW_TYPE);
 		if (existing.length > 0) {
-			this.app.workspace.revealLeaf(existing[0]!);
+			void this.app.workspace.revealLeaf(existing[0]!);
 			return;
 		}
 
 		const leaf = this.app.workspace.getLeaf('tab');
 		if (leaf) {
 			await leaf.setViewState({ type: CHAT_VIEW_TYPE, active: true });
-			this.app.workspace.revealLeaf(leaf);
+			void this.app.workspace.revealLeaf(leaf);
 		}
 	}
 
 	async activateMemoryStatusView(): Promise<void> {
 		const existing = this.app.workspace.getLeavesOfType(MEMORY_STATUS_VIEW_TYPE);
 		if (existing.length > 0) {
-			this.app.workspace.revealLeaf(existing[0]!);
+			void this.app.workspace.revealLeaf(existing[0]!);
 			return;
 		}
 
 		const leaf = this.app.workspace.getRightLeaf(false);
 		if (leaf) {
 			await leaf.setViewState({ type: MEMORY_STATUS_VIEW_TYPE, active: true });
-			this.app.workspace.revealLeaf(leaf);
+			void this.app.workspace.revealLeaf(leaf);
 		}
 	}
 }

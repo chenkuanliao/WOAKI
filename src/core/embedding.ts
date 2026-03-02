@@ -55,7 +55,8 @@ export class EmbeddingModel {
 				if (env.backends.onnx?.wasm) {
 					const adapter = this.app.vault.adapter as { basePath?: string };
 					if (adapter.basePath) {
-						const fs = require("fs") as typeof import("fs");
+						// eslint-disable-next-line @typescript-eslint/no-require-imports, import/no-nodejs-modules, no-undef
+					const fs = require("fs") as typeof import("fs");
 						const wasmPath = `${adapter.basePath}/${this.pluginDir}/ort-wasm-simd-threaded.wasm`;
 						try {
 							const wasmBuffer = fs.readFileSync(wasmPath);
@@ -71,7 +72,8 @@ export class EmbeddingModel {
 					env.backends.onnx.wasm.numThreads = 1;
 				}
 
-				this.extractor = await (pipeline as Function)("feature-extraction", this.modelName, {
+				// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-function-type
+			this.extractor = await (pipeline as Function)("feature-extraction", this.modelName, {
 					device: "wasm",
 					dtype: "fp32",
 				});
@@ -87,7 +89,9 @@ export class EmbeddingModel {
 
 	async embed(text: string): Promise<number[]> {
 		await this.ensureLoaded();
+		// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
 		const output = await this.extractor(text, { pooling: "mean", normalize: true });
+		// eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
 		return Array.from(output.data as Float32Array);
 	}
 
@@ -96,7 +100,9 @@ export class EmbeddingModel {
 		if (texts.length === 1) return [await this.embed(texts[0]!)];
 
 		await this.ensureLoaded();
+		// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
 		const output = await this.extractor(texts, { pooling: "mean", normalize: true });
+		// eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
 		const flat = output.data as Float32Array;
 		const dim = 384; // embedding dimensions
 		const results: number[][] = [];

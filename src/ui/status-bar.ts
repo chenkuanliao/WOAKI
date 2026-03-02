@@ -21,7 +21,7 @@ export class WoakiStatusBar {
 	setIndexing(active: boolean): void {
 		this.indexing = active;
 		if (active) {
-			this.statusBarEl.setText("🧠 Indexing...");
+			this.statusBarEl.setText("🧠 indexing...");
 		} else {
 			this.update();
 		}

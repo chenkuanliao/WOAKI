@@ -66,9 +66,9 @@ No API key needed for embeddings. No data leaves your machine during indexing.
 
 ### Manual Installation
 
-1. Download `main.js`, `styles.css`, and `manifest.json` from the [latest release](https://github.com/yourusername/obsidian-woaki/releases)
+1. Download `main.js`, `styles.css`, and `manifest.json` from the [latest release](https://github.com/chenkuanliao/WOAKI/releases)
 2. Create a folder at `<your-vault>/.obsidian/plugins/woaki/`
-3. Copy the three files into that folder
+3. Copy the three files into that folder (WASM files are downloaded automatically on first use via CDN fallback)
 4. Open **Settings > Community Plugins** and enable **WOAKI**
 
 ## Usage

@@ -98,9 +98,9 @@ export class MemoryManager {
 		if (existing) clearTimeout(existing);
 
 		// Set debounced re-index
-		const timer = setTimeout(async () => {
+		const timer = setTimeout(() => {
 			this.debounceTimers.delete(file.path);
-			await this.reindexNote(file);
+			void this.reindexNote(file);
 		}, REINDEX_DEBOUNCE_MS);
 
 		this.debounceTimers.set(file.path, timer);
@@ -305,6 +305,7 @@ export class MemoryManager {
 			}
 		}
 		if (cache.frontmatter?.tags) {
+			// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
 			const fmTags = cache.frontmatter.tags;
 			if (Array.isArray(fmTags)) {
 				for (const t of fmTags) {

@@ -105,8 +105,7 @@ export class WoakiDatabase {
 		// Remove old and re-insert with new path
 		for (const hit of results) {
 			await remove(this.db, hit.id);
-			const doc = hit.document as ChunkDocument;
-			await insert(this.db, { ...doc, filePath: newPath });
+			await insert(this.db, { ...hit.document, filePath: newPath });
 		}
 		this.dirty = true;
 	}
@@ -116,8 +115,7 @@ export class WoakiDatabase {
 		const results = await this.searchByField("noteId", noteId);
 		let removed = false;
 		for (const hit of results) {
-			const doc = hit.document as ChunkDocument;
-			if (doc.chunkIndex >= maxIndex) {
+			if (hit.document.chunkIndex >= maxIndex) {
 				await remove(this.db, hit.id);
 				removed = true;
 			}
@@ -129,9 +127,8 @@ export class WoakiDatabase {
 		if (!this.db) return null;
 		const results = await this.searchByField("noteId", noteId);
 		for (const hit of results) {
-			const doc = hit.document as ChunkDocument;
-			if (doc.chunkIndex === chunkIndex) {
-				return doc;
+			if (hit.document.chunkIndex === chunkIndex) {
+				return hit.document;
 			}
 		}
 		return null;
@@ -140,6 +137,7 @@ export class WoakiDatabase {
 	async vectorSearch(queryEmbedding: number[], limit = 10, tagFilter?: string[]): Promise<SearchResult[]> {
 		if (!this.db) return [];
 		const fetchLimit = tagFilter && tagFilter.length > 0 ? limit * 3 : limit;
+		// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
 		const results = await search(this.db, {
 			mode: "vector",
 			vector: {
@@ -167,6 +165,7 @@ export class WoakiDatabase {
 	async hybridSearch(query: string, queryEmbedding: number[], limit = 10, tagFilter?: string[]): Promise<SearchResult[]> {
 		if (!this.db) return [];
 		const fetchLimit = tagFilter && tagFilter.length > 0 ? limit * 3 : limit;
+		// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
 		const results = await search(this.db, {
 			mode: "hybrid",
 			term: query,
@@ -204,7 +203,7 @@ export class WoakiDatabase {
 
 	getDocumentCount(): number {
 		if (!this.db) return 0;
-		return count(this.db) as number;
+		return count(this.db);
 	}
 
 	async getDbFileSize(): Promise<number> {
@@ -218,6 +217,7 @@ export class WoakiDatabase {
 
 	async getNoteStats(): Promise<Map<string, { chunkCount: number; updatedAt: number; tags: string; filePath: string; title: string }>> {
 		if (!this.db) return new Map();
+		// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
 		const results = await search(this.db, {
 			term: "",
 			limit: 100000,
@@ -252,6 +252,7 @@ export class WoakiDatabase {
 
 	async getNoteIds(): Promise<Set<string>> {
 		if (!this.db) return new Set();
+		// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
 		const results = await search(this.db, {
 			term: "",
 			limit: 100000,
@@ -267,6 +268,7 @@ export class WoakiDatabase {
 	private async searchByField(field: string, value: string): Promise<SearchResult[]> {
 		if (!this.db) return [];
 
+		// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
 		const results = await search(this.db, {
 			where: {
 				[field]: value

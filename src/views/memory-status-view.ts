@@ -57,28 +57,26 @@ export class WoakiMemoryStatusView extends ItemView {
 		// Actions
 		const actionsRow = summary.createDiv("woaki-memory-actions-row");
 
-		const rebuildBtn = actionsRow.createEl("button", { text: "Rebuild DB", cls: "woaki-memory-action-btn" });
-		rebuildBtn.addEventListener("click", async () => {
-			await this.plugin.memoryManager.rebuildDatabase();
-			await this.refresh();
+		const rebuildBtn = actionsRow.createEl("button", { text: "Rebuild database", cls: "woaki-memory-action-btn" });
+		rebuildBtn.addEventListener("click", () => {
+			void this.plugin.memoryManager.rebuildDatabase().then(() => this.refresh());
 		});
 
 		const clearBtn = actionsRow.createEl("button", { cls: "woaki-memory-action-btn mod-warning" });
 		clearBtn.createSpan({ text: "Clear DB" });
 		clearBtn.addEventListener("click", () => {
-			const modal = new ClearDatabaseModal(this.app, async () => {
-				await this.plugin.memoryManager.clearDatabase();
-				await this.refresh();
+			const modal = new ClearDatabaseModal(this.app, () => {
+				return this.plugin.memoryManager.clearDatabase().then(() => this.refresh());
 			});
 			modal.open();
 		});
 
 		const refreshBtn = actionsRow.createEl("button", { text: "Refresh", cls: "woaki-memory-action-btn" });
-		refreshBtn.addEventListener("click", () => this.refresh());
+		refreshBtn.addEventListener("click", () => void this.refresh());
 
 		// Note list
 		const listHeader = this.contentArea.createDiv("woaki-memory-list-header");
-		listHeader.createEl("span", { text: "Memorized Notes" });
+		listHeader.createEl("span", { text: "Memorized notes" });
 
 		const list = this.contentArea.createDiv("woaki-memory-note-list");
 
@@ -98,7 +96,7 @@ export class WoakiMemoryStatusView extends ItemView {
 			const titleLink = info.createEl("a", { text: file.basename, cls: "woaki-memory-note-title" });
 			titleLink.addEventListener("click", (e) => {
 				e.preventDefault();
-				this.app.workspace.openLinkText(file.path, "");
+				void this.app.workspace.openLinkText(file.path, "");
 			});
 
 			const meta = info.createDiv("woaki-memory-note-meta");
@@ -123,9 +121,8 @@ export class WoakiMemoryStatusView extends ItemView {
 				text: "Forget",
 				cls: "woaki-memory-unmemorize-btn",
 			});
-			unmemorizeBtn.addEventListener("click", async () => {
-				await this.plugin.memoryManager.unmemorizeNote(file);
-				await this.refresh();
+			unmemorizeBtn.addEventListener("click", () => {
+				void this.plugin.memoryManager.unmemorizeNote(file).then(() => this.refresh());
 			});
 		}
 	}
@@ -166,7 +163,7 @@ class ClearDatabaseModal extends Modal {
 		contentEl.empty();
 		contentEl.addClass("woaki-clear-db-modal");
 
-		contentEl.createEl("h3", { text: "Clear Memory Database" });
+		contentEl.createEl("h3", { text: "Clear memory database" });
 		contentEl.createEl("p", {
 			text: "Are you sure you want to clear the entire memory database? This will remove all memorized note embeddings. Your notes themselves will not be affected, but you will need to re-memorize them.",
 		});
@@ -176,10 +173,10 @@ class ClearDatabaseModal extends Modal {
 		const cancelBtn = btnContainer.createEl("button", { text: "Cancel", cls: "woaki-clear-db-cancel-btn" });
 		cancelBtn.addEventListener("click", () => this.close());
 
-		const confirmBtn = btnContainer.createEl("button", { text: "Clear Database", cls: "woaki-clear-db-confirm-btn" });
-		confirmBtn.addEventListener("click", async () => {
+		const confirmBtn = btnContainer.createEl("button", { text: "Clear database", cls: "woaki-clear-db-confirm-btn" });
+		confirmBtn.addEventListener("click", () => {
 			this.close();
-			await this.onConfirm();
+			void this.onConfirm();
 		});
 	}
 
