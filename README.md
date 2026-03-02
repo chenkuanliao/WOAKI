@@ -43,7 +43,6 @@ Connect to any OpenAI-compatible LLM provider:
 | Provider | Type | API Key Required |
 |----------|------|-----------------|
 | [Ollama](https://ollama.com) | Local | No |
-| [LM Studio](https://lmstudio.ai) | Local | No |
 | OpenAI | Cloud | Yes |
 | Anthropic | Cloud | Yes |
 | Custom endpoint | Any | Configurable |
