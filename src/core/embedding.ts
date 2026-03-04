@@ -57,7 +57,7 @@ export class EmbeddingModel {
 				if (env.backends.onnx?.wasm) {
 					const adapter = this.app.vault.adapter as { basePath?: string };
 					if (adapter.basePath) {
-						// eslint-disable-next-line @typescript-eslint/no-require-imports -- dynamic require needed for Node.js fs in Electron's renderer process
+						// eslint-disable-next-line @typescript-eslint/no-require-imports, no-undef -- dynamic require needed for Node.js fs in Electron's renderer process
 					const fs = require("fs") as typeof import("fs");
 						const wasmPath = `${adapter.basePath}/${this.pluginDir}/ort-wasm-simd-threaded.wasm`;
 						try {

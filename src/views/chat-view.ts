@@ -138,8 +138,8 @@ export class WoakiChatView extends ItemView {
 
         // Auto-resize textarea and handle autocomplete
         this.inputEl.addEventListener("input", () => {
-            this.inputEl.style.setProperty("height", "auto");
-            this.inputEl.style.setProperty("height", Math.min(this.inputEl.scrollHeight, 150) + "px");
+            this.inputEl.setCssStyles({ height: "auto" });
+            this.inputEl.setCssStyles({ height: Math.min(this.inputEl.scrollHeight, 150) + "px" });
             this.handleAutocomplete();
         });
 
@@ -296,7 +296,7 @@ export class WoakiChatView extends ItemView {
         if (!query || this.isGenerating) return;
 
         this.inputEl.value = "";
-        this.inputEl.style.setProperty("height", "auto");
+        this.inputEl.setCssStyles({ height: "auto" });
 
         await this.processMessage(query);
     }
@@ -523,7 +523,7 @@ export class WoakiChatView extends ItemView {
         const message = this.conversationHistory.find(m => m.id === id);
         const originalText = message ? message.content : contentEl.innerText;
 
-        contentEl.style.setProperty("display", "none");
+        contentEl.setCssStyles({ display: "none" });
         bubbleEl.querySelector(".woaki-message-edit-btn")?.addClass("is-hidden");
 
         const editorWrapper = bubbleEl.createDiv("woaki-inline-editor");
@@ -540,7 +540,7 @@ export class WoakiChatView extends ItemView {
 
         const cleanup = () => {
             editorWrapper.remove();
-            contentEl.style.setProperty("display", "block");
+            contentEl.setCssStyles({ display: "block" });
             bubbleEl.querySelector(".woaki-message-edit-btn")?.removeClass("is-hidden");
         };
 

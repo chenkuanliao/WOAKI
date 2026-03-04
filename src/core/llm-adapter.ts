@@ -112,8 +112,10 @@ export class LLMAdapter {
                 });
 
                 if (p.name === "Ollama") {
+                    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access -- requestUrl response.json is untyped
                     return { content: response.json.message?.content ?? "" };
                 }
+                // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access -- requestUrl response.json is untyped
                 return { content: response.json.choices[0].message.content };
             } catch (e: unknown) {
                 const status = (e as { status?: number })?.status;
@@ -154,7 +156,7 @@ export class LLMAdapter {
         // streaming responses (SSE / ReadableStream).
         let response: Response;
         try {
-            response = await fetch(url, {
+            response = await globalThis.fetch(url, {
                 method: "POST",
                 headers,
                 body: JSON.stringify(body),
@@ -187,8 +189,11 @@ export class LLMAdapter {
                         const trimmed = line.trim();
                         if (!trimmed) continue;
                         try {
+                            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- parsed streaming JSON has no static type
                             const parsed = JSON.parse(trimmed);
+                            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument -- streaming protocol field access
                             if (parsed.message?.content) onChunk(parsed.message.content);
+                            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- streaming protocol field access
                             if (parsed.done) {
                                 onDone();
                                 return;
@@ -202,8 +207,11 @@ export class LLMAdapter {
                                 return;
                             }
                             try {
+                                // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- parsed streaming JSON has no static type
                                 const parsed = JSON.parse(data);
+                                // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access -- streaming protocol field access
                                 const content = parsed.choices?.[0]?.delta?.content;
+                                // eslint-disable-next-line @typescript-eslint/no-unsafe-argument -- streaming content is string
                                 if (content) onChunk(content);
                             } catch { /* skip malformed lines */ }
                         }
@@ -277,6 +285,7 @@ export class LLMAdapter {
             if (p.name === "Ollama") {
                 url = `${p.baseUrl}/api/tags`;
                 const response = await requestUrl({ url, method: "GET", headers });
+                // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access -- requestUrl response.json is untyped
                 return response.json.models?.map((m: { name: string }) => m.name) ?? [];
             } else if (p.name === "Anthropic") {
                 return [
@@ -292,6 +301,7 @@ export class LLMAdapter {
                     headers["Authorization"] = `Bearer ${p.apiKey}`;
                 }
                 const response = await requestUrl({ url, method: "GET", headers });
+                // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access -- requestUrl response.json is untyped
                 const allModels: string[] = response.json.data?.map((m: { id: string }) => m.id) ?? [];
                 const chatPrefixes = ["gpt-", "o1-", "o3-", "o4-", "chatgpt-"];
                 return allModels
@@ -356,7 +366,9 @@ export class LLMAdapter {
                 body: JSON.stringify(body),
             });
 
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access -- requestUrl response.json is untyped
             const textBlock = response.json.content?.find((b: { type: string; text?: string }) => b.type === "text");
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access -- accessing text from untyped JSON response
             return { content: textBlock?.text ?? "" };
         } catch (e: unknown) {
             const status = (e as { status?: number })?.status;
@@ -400,7 +412,7 @@ export class LLMAdapter {
         // streaming responses (SSE / ReadableStream).
         let response: Response;
         try {
-            response = await fetch(url, {
+            response = await globalThis.fetch(url, {
                 method: "POST",
                 headers,
                 body: JSON.stringify(body),
@@ -432,10 +444,14 @@ export class LLMAdapter {
                     if (line.startsWith("data: ")) {
                         const data = line.slice(6);
                         try {
+                            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- parsed streaming JSON has no static type
                             const parsed = JSON.parse(data);
+                            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- streaming protocol field access
                             if (parsed.type === "content_block_delta" && parsed.delta?.text) {
+                                // eslint-disable-next-line @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access -- streaming content is string
                                 onChunk(parsed.delta.text);
                             }
+                            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- streaming protocol field access
                             if (parsed.type === "message_stop") {
                                 onDone();
                                 return;

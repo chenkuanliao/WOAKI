@@ -179,7 +179,7 @@ export class MemoryManager {
 
 	async rebuildDatabase(): Promise<void> {
 		showNotice("Rebuilding memory database...");
-		await this.plugin.database.clear();
+		this.plugin.database.clear();
 
 		const files = this.plugin.app.vault.getMarkdownFiles();
 		const memorizedFiles: TFile[] = [];
@@ -228,7 +228,7 @@ export class MemoryManager {
 	}
 
 	async clearDatabase(): Promise<void> {
-		await this.plugin.database.clear();
+		this.plugin.database.clear();
 		await this.plugin.database.persist();
 		showNotice("Memory database cleared.");
 	}
@@ -305,6 +305,7 @@ export class MemoryManager {
 			}
 		}
 		if (cache.frontmatter?.tags) {
+			// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- frontmatter tags field is untyped
 			const fmTags = cache.frontmatter.tags;
 			if (Array.isArray(fmTags)) {
 				for (const t of fmTags) {
