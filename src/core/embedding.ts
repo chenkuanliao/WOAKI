@@ -1,11 +1,13 @@
 import { showNotice } from "../ui/notices";
 import type { App } from "obsidian";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type Extractor = any;
+interface ExtractorOutput {
+	data: Float32Array;
+}
+type ExtractorFn = (input: string | string[], options: { pooling: string; normalize: boolean }) => Promise<ExtractorOutput>;
 
 export class EmbeddingModel {
-	private extractor: Extractor = null;
+	private extractor: ExtractorFn | null = null;
 	private loading: Promise<void> | null = null;
 	private modelName: string;
 	private app: App;
@@ -55,7 +57,7 @@ export class EmbeddingModel {
 				if (env.backends.onnx?.wasm) {
 					const adapter = this.app.vault.adapter as { basePath?: string };
 					if (adapter.basePath) {
-						// eslint-disable-next-line @typescript-eslint/no-require-imports, import/no-nodejs-modules, no-undef
+						// eslint-disable-next-line @typescript-eslint/no-require-imports -- dynamic require needed for Node.js fs in Electron's renderer process
 					const fs = require("fs") as typeof import("fs");
 						const wasmPath = `${adapter.basePath}/${this.pluginDir}/ort-wasm-simd-threaded.wasm`;
 						try {
@@ -72,8 +74,10 @@ export class EmbeddingModel {
 					env.backends.onnx.wasm.numThreads = 1;
 				}
 
-				// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-function-type
-			this.extractor = await (pipeline as Function)("feature-extraction", this.modelName, {
+			const createPipeline = pipeline as unknown as (
+				task: string, model: string, options: { device: string; dtype: string },
+			) => Promise<ExtractorFn>;
+			this.extractor = await createPipeline("feature-extraction", this.modelName, {
 					device: "wasm",
 					dtype: "fp32",
 				});
@@ -89,10 +93,8 @@ export class EmbeddingModel {
 
 	async embed(text: string): Promise<number[]> {
 		await this.ensureLoaded();
-		// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
-		const output = await this.extractor(text, { pooling: "mean", normalize: true });
-		// eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-		return Array.from(output.data as Float32Array);
+		const output = await this.extractor!(text, { pooling: "mean", normalize: true });
+		return Array.from(output.data);
 	}
 
 	async embedBatch(texts: string[]): Promise<number[][]> {
@@ -100,10 +102,8 @@ export class EmbeddingModel {
 		if (texts.length === 1) return [await this.embed(texts[0]!)];
 
 		await this.ensureLoaded();
-		// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
-		const output = await this.extractor(texts, { pooling: "mean", normalize: true });
-		// eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-		const flat = output.data as Float32Array;
+		const output = await this.extractor!(texts, { pooling: "mean", normalize: true });
+		const flat = output.data;
 		const dim = 384; // embedding dimensions
 		const results: number[][] = [];
 		for (let i = 0; i < texts.length; i++) {

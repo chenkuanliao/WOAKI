@@ -90,7 +90,7 @@ export class MemoryManager {
 		return isNoteMemorized(this.plugin.app, file);
 	}
 
-	async handleFileChange(file: TFile): Promise<void> {
+	handleFileChange(file: TFile): void {
 		if (!isNoteMemorized(this.plugin.app, file)) return;
 
 		// Clear existing timer for this file
@@ -305,7 +305,6 @@ export class MemoryManager {
 			}
 		}
 		if (cache.frontmatter?.tags) {
-			// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
 			const fmTags = cache.frontmatter.tags;
 			if (Array.isArray(fmTags)) {
 				for (const t of fmTags) {

@@ -137,7 +137,7 @@ export class WoakiDatabase {
 	async vectorSearch(queryEmbedding: number[], limit = 10, tagFilter?: string[]): Promise<SearchResult[]> {
 		if (!this.db) return [];
 		const fetchLimit = tagFilter && tagFilter.length > 0 ? limit * 3 : limit;
-		// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
+		// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- Orama search returns a broad union type; explicit cast needed for ChunkDocument access
 		const results = await search(this.db, {
 			mode: "vector",
 			vector: {
@@ -165,7 +165,7 @@ export class WoakiDatabase {
 	async hybridSearch(query: string, queryEmbedding: number[], limit = 10, tagFilter?: string[]): Promise<SearchResult[]> {
 		if (!this.db) return [];
 		const fetchLimit = tagFilter && tagFilter.length > 0 ? limit * 3 : limit;
-		// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
+		// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- Orama search returns a broad union type; explicit cast needed for ChunkDocument access
 		const results = await search(this.db, {
 			mode: "hybrid",
 			term: query,
@@ -217,7 +217,7 @@ export class WoakiDatabase {
 
 	async getNoteStats(): Promise<Map<string, { chunkCount: number; updatedAt: number; tags: string; filePath: string; title: string }>> {
 		if (!this.db) return new Map();
-		// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
+		// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- Orama search returns a broad union type; explicit cast needed for ChunkDocument access
 		const results = await search(this.db, {
 			term: "",
 			limit: 100000,
@@ -245,14 +245,14 @@ export class WoakiDatabase {
 		return stats;
 	}
 
-	async clear(): Promise<void> {
+	clear(): void {
 		this.db = create({ schema: SCHEMA });
 		this.dirty = true;
 	}
 
 	async getNoteIds(): Promise<Set<string>> {
 		if (!this.db) return new Set();
-		// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
+		// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- Orama search returns a broad union type; explicit cast needed for ChunkDocument access
 		const results = await search(this.db, {
 			term: "",
 			limit: 100000,
@@ -268,7 +268,7 @@ export class WoakiDatabase {
 	private async searchByField(field: string, value: string): Promise<SearchResult[]> {
 		if (!this.db) return [];
 
-		// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
+		// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- Orama search returns a broad union type; explicit cast needed for ChunkDocument access
 		const results = await search(this.db, {
 			where: {
 				[field]: value

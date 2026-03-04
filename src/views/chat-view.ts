@@ -138,9 +138,8 @@ export class WoakiChatView extends ItemView {
 
         // Auto-resize textarea and handle autocomplete
         this.inputEl.addEventListener("input", () => {
-            // eslint-disable-next-line obsidianmd/no-static-styles-assignment -- dynamic height for auto-resize
-            this.inputEl.style.height = "auto";
-            this.inputEl.style.height = Math.min(this.inputEl.scrollHeight, 150) + "px";
+            this.inputEl.style.setProperty("height", "auto");
+            this.inputEl.style.setProperty("height", Math.min(this.inputEl.scrollHeight, 150) + "px");
             this.handleAutocomplete();
         });
 
@@ -297,8 +296,7 @@ export class WoakiChatView extends ItemView {
         if (!query || this.isGenerating) return;
 
         this.inputEl.value = "";
-        // eslint-disable-next-line obsidianmd/no-static-styles-assignment -- reset dynamic height
-        this.inputEl.style.height = "auto";
+        this.inputEl.style.setProperty("height", "auto");
 
         await this.processMessage(query);
     }
@@ -473,8 +471,7 @@ export class WoakiChatView extends ItemView {
                     });
                     settingsBtn.addEventListener("click", () => {
                         // Open settings tab
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-                        (this.app as any).setting?.open?.();
+                        (this.app as unknown as { setting?: { open?: () => void } }).setting?.open?.();
                     });
                 }
             }
@@ -526,8 +523,7 @@ export class WoakiChatView extends ItemView {
         const message = this.conversationHistory.find(m => m.id === id);
         const originalText = message ? message.content : contentEl.innerText;
 
-        // eslint-disable-next-line obsidianmd/no-static-styles-assignment -- toggle inline editor visibility
-        contentEl.style.display = "none";
+        contentEl.style.setProperty("display", "none");
         bubbleEl.querySelector(".woaki-message-edit-btn")?.addClass("is-hidden");
 
         const editorWrapper = bubbleEl.createDiv("woaki-inline-editor");
@@ -544,8 +540,7 @@ export class WoakiChatView extends ItemView {
 
         const cleanup = () => {
             editorWrapper.remove();
-            // eslint-disable-next-line obsidianmd/no-static-styles-assignment -- toggle inline editor visibility
-            contentEl.style.display = "block";
+            contentEl.style.setProperty("display", "block");
             bubbleEl.querySelector(".woaki-message-edit-btn")?.removeClass("is-hidden");
         };
 
@@ -786,7 +781,7 @@ export class WoakiChatView extends ItemView {
         }
     }
 
-    private async toggleModelDropdown(container: HTMLElement): Promise<void> {
+    private toggleModelDropdown(container: HTMLElement): void {
         // If already open, dismiss
         if (this.modelDropdownEl) {
             this.dismissModelDropdown();

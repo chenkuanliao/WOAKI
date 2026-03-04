@@ -112,14 +112,11 @@ export class LLMAdapter {
                 });
 
                 if (p.name === "Ollama") {
-                    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
                     return { content: response.json.message?.content ?? "" };
                 }
-                // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
                 return { content: response.json.choices[0].message.content };
             } catch (e: unknown) {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
-                const status = (e as any)?.status;
+                const status = (e as { status?: number })?.status;
                 if (typeof status === "number") {
                     throw classifyHttpError(status, String(e), p.name);
                 }
@@ -157,7 +154,6 @@ export class LLMAdapter {
         // streaming responses (SSE / ReadableStream).
         let response: Response;
         try {
-            // eslint-disable-next-line no-restricted-globals
             response = await fetch(url, {
                 method: "POST",
                 headers,
@@ -191,11 +187,8 @@ export class LLMAdapter {
                         const trimmed = line.trim();
                         if (!trimmed) continue;
                         try {
-                            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
                             const parsed = JSON.parse(trimmed);
-                            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument
                             if (parsed.message?.content) onChunk(parsed.message.content);
-                            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
                             if (parsed.done) {
                                 onDone();
                                 return;
@@ -209,11 +202,8 @@ export class LLMAdapter {
                                 return;
                             }
                             try {
-                                // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
                                 const parsed = JSON.parse(data);
-                                // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
                                 const content = parsed.choices?.[0]?.delta?.content;
-                                // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
                                 if (content) onChunk(content);
                             } catch { /* skip malformed lines */ }
                         }
@@ -287,8 +277,7 @@ export class LLMAdapter {
             if (p.name === "Ollama") {
                 url = `${p.baseUrl}/api/tags`;
                 const response = await requestUrl({ url, method: "GET", headers });
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-                return response.json.models?.map((m: any) => m.name) ?? [];
+                return response.json.models?.map((m: { name: string }) => m.name) ?? [];
             } else if (p.name === "Anthropic") {
                 return [
                     "claude-opus-4-6",
@@ -303,8 +292,7 @@ export class LLMAdapter {
                     headers["Authorization"] = `Bearer ${p.apiKey}`;
                 }
                 const response = await requestUrl({ url, method: "GET", headers });
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return
-                const allModels: string[] = response.json.data?.map((m: any) => m.id) ?? [];
+                const allModels: string[] = response.json.data?.map((m: { id: string }) => m.id) ?? [];
                 const chatPrefixes = ["gpt-", "o1-", "o3-", "o4-", "chatgpt-"];
                 return allModels
                     .filter(id => chatPrefixes.some(pfx => id.startsWith(pfx)))
@@ -368,13 +356,10 @@ export class LLMAdapter {
                 body: JSON.stringify(body),
             });
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-            const textBlock = response.json.content?.find((b: any) => b.type === "text");
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
+            const textBlock = response.json.content?.find((b: { type: string; text?: string }) => b.type === "text");
             return { content: textBlock?.text ?? "" };
         } catch (e: unknown) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
-            const status = (e as any)?.status;
+            const status = (e as { status?: number })?.status;
             if (typeof status === "number") {
                 throw classifyHttpError(status, String(e), "Anthropic");
             }
@@ -415,7 +400,6 @@ export class LLMAdapter {
         // streaming responses (SSE / ReadableStream).
         let response: Response;
         try {
-            // eslint-disable-next-line no-restricted-globals
             response = await fetch(url, {
                 method: "POST",
                 headers,
@@ -448,14 +432,10 @@ export class LLMAdapter {
                     if (line.startsWith("data: ")) {
                         const data = line.slice(6);
                         try {
-                            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
                             const parsed = JSON.parse(data);
-                            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
                             if (parsed.type === "content_block_delta" && parsed.delta?.text) {
-                                // eslint-disable-next-line @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access
                                 onChunk(parsed.delta.text);
                             }
-                            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
                             if (parsed.type === "message_stop") {
                                 onDone();
                                 return;

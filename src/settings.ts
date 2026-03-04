@@ -81,9 +81,8 @@ export class WoakiSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		// --- LLM Providers ---
-		// eslint-disable-next-line obsidianmd/ui/sentence-case -- LLM is a standard acronym
-		new Setting(containerEl).setName("LLM providers").setHeading();
+		// --- Language model providers ---
+		new Setting(containerEl).setName("Language model providers").setHeading();
 		containerEl.createEl("p", {
 			text: "Configure one or more providers. Star (★) the models you want available in chat.",
 			cls: "setting-item-description",
