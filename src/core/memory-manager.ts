@@ -305,7 +305,6 @@ export class MemoryManager {
 			}
 		}
 		if (cache.frontmatter?.tags) {
-			// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- frontmatter tags field is untyped
 			const fmTags = cache.frontmatter.tags;
 			if (Array.isArray(fmTags)) {
 				for (const t of fmTags) {
